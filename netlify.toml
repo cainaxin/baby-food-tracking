@@ -1,0 +1,7 @@
+# Cloudflare Pages / Netlify 构建配置（与 Vercel 一致）
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
