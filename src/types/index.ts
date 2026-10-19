@@ -1,6 +1,8 @@
 export type EventType =
   | 'milk'
   | 'solid'
+  | 'water'
+  | 'diaper'
   | 'sleep'
   | 'wake'
   | 'outing'
@@ -38,6 +40,8 @@ export const EVENT_META: Record<
 > = {
   milk: { label: '吃奶', short: '奶', color: '#FF9F0A', icon: '🍼' },
   solid: { label: '辅食', short: '辅', color: '#FF6482', icon: '🥣' },
+  water: { label: '喝水', short: '水', color: '#5AC8FA', icon: '💧' },
+  diaper: { label: '换尿布', short: '尿', color: '#FFD60A', icon: '🩲' },
   sleep: { label: '睡觉', short: '睡', color: '#5E5CE6', icon: '😴' },
   wake: { label: '起床', short: '起', color: '#30D158', icon: '☀️' },
   outing: { label: '外出', short: '外', color: '#64D2FF', icon: '🌤' },
@@ -47,8 +51,16 @@ export const EVENT_META: Record<
 export const QUICK_TYPES: EventType[] = [
   'milk',
   'solid',
+  'water',
+  'diaper',
   'sleep',
   'wake',
   'outing',
   'bath_swim',
 ]
+
+export const DIAPER_TAGS = ['尿尿', '拉屎', '尿尿+拉屎'] as const
+
+export const MILK_KINDS = ['亲喂', '冻奶', '奶粉'] as const
+
+export const DEFAULT_SOLID_TYPES = ['米粉', '米糊', '果泥', '蛋黄', '面条', '粥']

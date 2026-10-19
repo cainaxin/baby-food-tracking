@@ -33,7 +33,7 @@ create table if not exists event (
   id uuid primary key default gen_random_uuid(),
   family_id uuid not null references family(id) on delete cascade,
   baby_id uuid not null references baby(id) on delete cascade,
-  type text not null check (type in ('milk','solid','sleep','wake','outing','bath_swim')),
+  type text not null check (type in ('milk','solid','water','diaper','sleep','wake','outing','bath_swim')),
   start_at timestamptz not null,
   end_at timestamptz,
   amount_ml integer check (amount_ml is null or (amount_ml >= 0 and amount_ml <= 2000)),

@@ -1,6 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Baby, BabyEvent, EventType } from './types'
-import { EVENT_META, QUICK_TYPES } from './types'
+import {
+  DIAPER_TAGS,
+  EVENT_META,
+  MILK_KINDS,
+  QUICK_TYPES,
+} from './types'
+import { loadSolidTypes, saveSolidTypes } from './lib/solidTypes'
 import {
   addBaby,
   deleteBaby,
@@ -57,7 +63,9 @@ function Avatar({
 
 function eventSubtitle(ev: BabyEvent): string {
   const parts: string[] = []
-  if (ev.type === 'milk' && ev.amountMl != null) parts.push(`${ev.amountMl} ml`)
+  if ((ev.type === 'milk' || ev.type === 'water') && ev.amountMl != null) {
+    parts.push(`${ev.amountMl} ml`)
+  }
   if (ev.type === 'sleep' && ev.endAt) {
     parts.push(`${formatTime(ev.startAt)} – ${formatTime(ev.endAt)}`)
     parts.push(formatDuration(ev.startAt, ev.endAt))
@@ -307,14 +315,38 @@ function EventSheet({
   const meta = EVENT_META[type]
   const [startAt, setStartAt] = useState(toLocalInputValue(edit?.startAt ?? nowIso()))
   const [endAt, setEndAt] = useState(edit?.endAt ? toLocalInputValue(edit.endAt) : '')
-  const [amountMl, setAmountMl] = useState(edit?.amountMl ?? 120)
+  const [amountMl, setAmountMl] = useState(
+    edit?.amountMl ?? (type === 'water' ? 30 : 120),
+  )
   const [note, setNote] = useState(edit?.note ?? '')
+  const [solidTypes, setSolidTypes] = useState<string[]>(() => loadSolidTypes())
+  const [editingSolidTypes, setEditingSolidTypes] = useState(false)
+  const [newSolidType, setNewSolidType] = useState('')
 
-  const solidPresets = ['米粉', '米糊', '果泥', '蛋黄', '面条', '粥']
   const bathPresets = [
     { label: '洗澡', value: '洗澡' },
     { label: '游泳', value: '游泳' },
   ]
+  const amountStep = type === 'water' ? 5 : 10
+  const amountMax = type === 'water' ? 500 : 2000
+  const showAmount = type === 'milk' || type === 'water'
+  const showNoteField = !['bath_swim', 'diaper', 'solid'].includes(type)
+
+  const addSolidType = () => {
+    const value = newSolidType.trim()
+    if (!value || solidTypes.includes(value)) return
+    const next = [...solidTypes, value]
+    setSolidTypes(next)
+    saveSolidTypes(next)
+    setNewSolidType('')
+  }
+
+  const removeSolidType = (value: string) => {
+    const next = solidTypes.filter((t) => t !== value)
+    setSolidTypes(next)
+    saveSolidTypes(next)
+    if (note === value) setNote('')
+  }
 
   return (
     <div className="sheet-backdrop" onClick={onCancel}>
@@ -349,15 +381,15 @@ function EventSheet({
           </div>
         )}
 
-        {type === 'milk' && (
+        {showAmount && (
           <div className="field">
-            <label>奶量</label>
+            <label>{type === 'water' ? '水量' : '奶量'}</label>
             <div className="amount-control">
               <button
                 type="button"
                 className="amount-btn"
-                onClick={() => setAmountMl((v) => Math.max(0, v - 10))}
-                aria-label="减少 10 毫升"
+                onClick={() => setAmountMl((v) => Math.max(0, v - amountStep))}
+                aria-label={`减少 ${amountStep} 毫升`}
               >
                 −
               </button>
@@ -368,21 +400,41 @@ function EventSheet({
               <button
                 type="button"
                 className="amount-btn"
-                onClick={() => setAmountMl((v) => Math.min(2000, v + 10))}
-                aria-label="增加 10 毫升"
+                onClick={() => setAmountMl((v) => Math.min(amountMax, v + amountStep))}
+                aria-label={`增加 ${amountStep} 毫升`}
               >
                 +
               </button>
             </div>
             <div className="chip-row" style={{ marginTop: 10 }}>
-              {[80, 100, 120, 150, 180, 200].map((ml) => (
+              {(type === 'water' ? [10, 20, 30, 50, 80, 100] : [80, 100, 120, 150, 180, 200]).map(
+                (ml) => (
+                  <button
+                    key={ml}
+                    type="button"
+                    className={`chip${amountMl === ml ? ' active' : ''}`}
+                    onClick={() => setAmountMl(ml)}
+                  >
+                    {ml}
+                  </button>
+                ),
+              )}
+            </div>
+          </div>
+        )}
+
+        {type === 'milk' && (
+          <div className="field">
+            <label>奶的类型</label>
+            <div className="chip-row">
+              {MILK_KINDS.map((p) => (
                 <button
-                  key={ml}
+                  key={p}
                   type="button"
-                  className={`chip${amountMl === ml ? ' active' : ''}`}
-                  onClick={() => setAmountMl(ml)}
+                  className={`chip${note === p ? ' active' : ''}`}
+                  onClick={() => setNote(note === p ? '' : p)}
                 >
-                  {ml}
+                  {p}
                 </button>
               ))}
             </div>
@@ -391,9 +443,77 @@ function EventSheet({
 
         {type === 'solid' && (
           <div className="field">
-            <label>辅食类型（可点选）</label>
+            <div className="row-between">
+              <label>辅食类型（可点选）</label>
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => setEditingSolidTypes((v) => !v)}
+              >
+                {editingSolidTypes ? '完成' : '编辑类型'}
+              </button>
+            </div>
             <div className="chip-row">
-              {solidPresets.map((p) => (
+              {solidTypes.map((p) => (
+                <span key={p} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    className={`chip${note === p ? ' active' : ''}`}
+                    onClick={() => {
+                      if (editingSolidTypes) return
+                      setNote(p)
+                    }}
+                  >
+                    {p}
+                  </button>
+                  {editingSolidTypes && (
+                    <button
+                      type="button"
+                      className="chip"
+                      aria-label={`删除 ${p}`}
+                      style={{ marginLeft: 4, padding: '0 10px' }}
+                      onClick={() => removeSolidType(p)}
+                    >
+                      ×
+                    </button>
+                  )}
+                </span>
+              ))}
+              {!solidTypes.length && (
+                <span className="muted small">还没有辅食类型，先添加一个</span>
+              )}
+            </div>
+            {editingSolidTypes && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                <input
+                  value={newSolidType}
+                  onChange={(e) => setNewSolidType(e.target.value)}
+                  placeholder="新类型，如：蔬菜泥"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addSolidType()
+                    }
+                  }}
+                />
+                <button type="button" className="btn btn-primary" onClick={addSolidType}>
+                  添加
+                </button>
+              </div>
+            )}
+            {!editingSolidTypes && (
+              <div className="muted small" style={{ marginTop: 8 }}>
+                点「编辑类型」可增删选项；也可在下方备注写自定义
+              </div>
+            )}
+          </div>
+        )}
+
+        {type === 'diaper' && (
+          <div className="field">
+            <label>尿布情况</label>
+            <div className="chip-row">
+              {DIAPER_TAGS.map((p) => (
                 <button
                   key={p}
                   type="button"
@@ -425,18 +545,20 @@ function EventSheet({
           </div>
         )}
 
-        {type !== 'bath_swim' && (
+        {(showNoteField || type === 'solid') && (
           <div className="field">
-            <label>备注（可选）</label>
+            <label>{type === 'solid' ? '自定义辅食 / 备注' : '备注（可选）'}</label>
             <input
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder={
                 type === 'milk'
-                  ? '例如：亲喂 / 配方奶'
-                  : type === 'sleep'
-                    ? '例如：午睡'
-                    : '选填'
+                  ? '例如：亲喂 / 配方奶（也可点上方类型）'
+                  : type === 'solid'
+                    ? '例如：南瓜泥'
+                    : type === 'sleep'
+                      ? '例如：午睡'
+                      : '选填'
               }
             />
           </div>
@@ -451,7 +573,7 @@ function EventSheet({
                 type,
                 startAt: fromLocalInputValue(startAt),
                 endAt: endAt ? fromLocalInputValue(endAt) : null,
-                amountMl: type === 'milk' ? amountMl : null,
+                amountMl: showAmount ? amountMl : null,
                 note: note || null,
                 createdBy: edit?.createdBy || profileName,
               })
@@ -660,10 +782,27 @@ export default function App() {
   const [sheet, setSheet] = useState<Sheet>(null)
   const [historyDay, setHistoryDay] = useState(todayKey())
   const [toast, setToast] = useState('')
+  // 云端写入中的本地记录，刷新时保留，避免被慢同步冲掉
+  const pendingEventsRef = useRef<Map<string, BabyEvent>>(new Map())
+  const pendingDeletesRef = useRef<Set<string>>(new Set())
 
   const refresh = useCallback(async () => {
     const next = await loadData()
-    setData(next)
+    setData((prev) => {
+      if (!prev) return next
+      const keptBabyId =
+        prev.currentBabyId && next.babies.some((b) => b.id === prev.currentBabyId)
+          ? prev.currentBabyId
+          : next.currentBabyId
+      const merged = next.events.filter((e) => !pendingDeletesRef.current.has(e.id))
+      for (const p of pendingEventsRef.current.values()) {
+        const idx = merged.findIndex((e) => e.id === p.id)
+        if (idx >= 0) merged[idx] = p
+        else merged.push(p)
+      }
+      merged.sort((a, b) => b.startAt.localeCompare(a.startAt))
+      return { ...next, events: merged, currentBabyId: keptBabyId }
+    })
     return next
   }, [])
 
@@ -705,38 +844,99 @@ export default function App() {
       .sort((a, b) => b.startAt.localeCompare(a.startAt))
   }, [data, baby, historyDay])
 
-  const handleSaveEvent = async (
+  const handleSaveEvent = (
     payload: Partial<BabyEvent> & { type: EventType },
     editId?: string,
   ) => {
     if (!data) return
-    const { error } = await saveEvent(
-      {
-        id: editId,
-        type: payload.type,
-        startAt: payload.startAt ?? nowIso(),
-        endAt: payload.endAt ?? null,
-        amountMl: payload.amountMl ?? null,
-        note: payload.note ?? null,
-        createdBy: payload.createdBy || data.displayName,
-      },
-      data.currentBabyId,
-      data.displayName,
-    )
-    if (error) {
-      setToast(error)
+    const babyId = data.currentBabyId || baby?.id || null
+    if (!babyId) {
+      setToast('请先添加宝宝')
       return
     }
+
+    const optimisticId = editId ?? `local-${crypto.randomUUID()}`
+    const optimistic: BabyEvent = {
+      id: optimisticId,
+      babyId,
+      type: payload.type,
+      startAt: payload.startAt ?? nowIso(),
+      endAt: payload.endAt ?? null,
+      amountMl: payload.amountMl ?? null,
+      note: payload.note ?? null,
+      createdBy: payload.createdBy || data.displayName,
+      createdAt:
+        (editId && data.events.find((e) => e.id === editId)?.createdAt) || nowIso(),
+    }
+
+    // 先本地秒回：立刻改界面并关掉弹窗，不等网络
+    pendingEventsRef.current.set(optimisticId, optimistic)
+    setData((prev) => {
+      if (!prev) return prev
+      if (editId) {
+        return {
+          ...prev,
+          events: prev.events.map((e) => (e.id === editId ? optimistic : e)),
+        }
+      }
+      return { ...prev, events: [optimistic, ...prev.events] }
+    })
     setSheet(null)
-    await refresh()
+
+    // 后台同步云端；失败再提示并拉回真相
+    void (async () => {
+      const { error, event } = await saveEvent(
+        {
+          id: editId,
+          type: payload.type,
+          startAt: optimistic.startAt,
+          endAt: optimistic.endAt,
+          amountMl: optimistic.amountMl,
+          note: optimistic.note,
+          createdBy: optimistic.createdBy,
+          babyId,
+        },
+        data.currentBabyId,
+        data.displayName,
+      )
+      pendingEventsRef.current.delete(optimisticId)
+      if (error) {
+        setToast(error)
+        void refresh()
+        return
+      }
+      if (event) {
+        setData((prev) => {
+          if (!prev) return prev
+          const withoutTemp = prev.events.filter((e) => e.id !== optimisticId)
+          if (withoutTemp.some((e) => e.id === event.id)) {
+            return {
+              ...prev,
+              events: withoutTemp.map((e) => (e.id === event.id ? event : e)),
+            }
+          }
+          return { ...prev, events: [event, ...withoutTemp] }
+        })
+      }
+    })()
   }
 
-  const handleDeleteEvent = async (id: string) => {
+  const handleDeleteEvent = (id: string) => {
     if (!window.confirm('确定删除这条记录吗？')) return
-    const { error } = await deleteEvent(id)
-    if (error) setToast(error)
+    pendingDeletesRef.current.add(id)
+    pendingEventsRef.current.delete(id)
+    setData((prev) =>
+      prev ? { ...prev, events: prev.events.filter((e) => e.id !== id) } : prev,
+    )
     setSheet(null)
-    await refresh()
+    void (async () => {
+      const { error } = await deleteEvent(id)
+      pendingDeletesRef.current.delete(id)
+      if (error) {
+        setToast(error)
+        void refresh()
+      }
+    })()
   }
 
   const handleSaveBaby = async (
@@ -790,7 +990,10 @@ export default function App() {
               <div className="timeline-body">
                 <div className="timeline-title">
                   {meta.label}
-                  {ev.type === 'bath_swim' && ev.note ? ` · ${ev.note}` : ''}
+                  {(ev.type === 'bath_swim' || ev.type === 'diaper' || ev.type === 'milk') &&
+                  ev.note
+                    ? ` · ${ev.note}`
+                    : ''}
                 </div>
                 <div className="timeline-meta">
                   {formatTime(ev.startAt)} · {eventSubtitle(ev)}
