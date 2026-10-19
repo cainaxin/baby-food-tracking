@@ -66,6 +66,10 @@ function eventSubtitle(ev: BabyEvent): string {
   if ((ev.type === 'milk' || ev.type === 'water') && ev.amountMl != null) {
     parts.push(`${ev.amountMl} ml`)
   }
+  if (ev.type === 'milk' && ev.endAt) {
+    parts.push(`${formatTime(ev.startAt)} – ${formatTime(ev.endAt)}`)
+    parts.push(formatDuration(ev.startAt, ev.endAt))
+  }
   if (ev.type === 'sleep' && ev.endAt) {
     parts.push(`${formatTime(ev.startAt)} – ${formatTime(ev.endAt)}`)
     parts.push(formatDuration(ev.startAt, ev.endAt))
@@ -79,6 +83,268 @@ function eventSubtitle(ev: BabyEvent): string {
   return parts.join(' · ') || formatTime(ev.startAt)
 }
 
+function ElapsedHint({ label, from }: { label: string; from: string | null }) {
+  if (!from) return null
+  return (
+    <div className="elapsed-hint">{`${label} ${formatDuration(from)}`}</div>
+  )
+}
+
+function sleepMinutes(ev: BabyEvent): number {
+  const start = new Date(ev.startAt).getTime()
+  const end = ev.endAt ? new Date(ev.endAt).getTime() : Date.now()
+  return Math.max(0, Math.round((end - start) / 60000))
+}
+
+function formatMinutes(mins: number): string {
+  if (mins <= 0) return '0 分钟'
+  if (mins < 60) return `${mins} 分钟`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m ? `${h} 小时 ${m} 分` : `${h} 小时`
+}
+
+function dayStats(events: BabyEvent[]) {
+  const milkMl = events
+    .filter((e) => e.type === 'milk')
+    .reduce((s, e) => s + (e.amountMl ?? 0), 0)
+  const waterMl = events
+    .filter((e) => e.type === 'water')
+    .reduce((s, e) => s + (e.amountMl ?? 0), 0)
+  const sleepMin = events
+    .filter((e) => e.type === 'sleep')
+    .reduce((s, e) => s + sleepMinutes(e), 0)
+  return {
+    milkMl,
+    waterMl,
+    sleepMin,
+    diaper: events.filter((e) => e.type === 'diaper').length,
+    solid: events.filter((e) => e.type === 'solid').length,
+    outing: events.filter((e) => e.type === 'outing').length,
+  }
+}
+
+type TrendMetric = 'milk' | 'sleep' | 'diaper' | 'water'
+
+const TREND_METRICS: { key: TrendMetric; label: string; unit: string }[] = [
+  { key: 'milk', label: '奶量', unit: 'ml' },
+  { key: 'sleep', label: '睡眠', unit: '分钟' },
+  { key: 'diaper', label: '换尿布', unit: '次' },
+  { key: 'water', label: '喝水', unit: 'ml' },
+]
+
+function DayStats({ events }: { events: BabyEvent[] }) {
+  const s = dayStats(events)
+  return (
+    <div className="summary-grid">
+      <div className="summary-tile">
+        <div className="label">奶量</div>
+        <div className="value">{s.milkMl} ml</div>
+      </div>
+      <div className="summary-tile">
+        <div className="label">睡眠</div>
+        <div className="value" style={{ fontSize: 18 }}>
+          {formatMinutes(s.sleepMin)}
+        </div>
+      </div>
+      <div className="summary-tile">
+        <div className="label">换尿布</div>
+        <div className="value">{s.diaper} 次</div>
+      </div>
+      <div className="summary-tile">
+        <div className="label">喝水</div>
+        <div className="value">{s.waterMl} ml</div>
+      </div>
+      <div className="summary-tile">
+        <div className="label">辅食</div>
+        <div className="value">{s.solid} 次</div>
+      </div>
+      <div className="summary-tile">
+        <div className="label">外出</div>
+        <div className="value">{s.outing} 次</div>
+      </div>
+    </div>
+  )
+}
+
+function TrendChart({
+  events,
+  endDate,
+  selectedDay,
+  range,
+  metric,
+  onPickDay,
+}: {
+  events: BabyEvent[]
+  endDate: string
+  selectedDay: string
+  range: 7 | 30
+  metric: TrendMetric
+  onPickDay?: (day: string) => void
+}) {
+  const days: { key: string; label: string; value: number }[] = []
+  const end = new Date(`${endDate}T12:00:00`)
+  for (let i = range - 1; i >= 0; i--) {
+    const d = new Date(end)
+    d.setDate(end.getDate() - i)
+    const key = todayKey(d)
+    const dayEvents = events.filter((e) => todayKey(new Date(e.startAt)) === key)
+    let value = 0
+    if (metric === 'milk') {
+      value = dayEvents
+        .filter((e) => e.type === 'milk')
+        .reduce((s, e) => s + (e.amountMl ?? 0), 0)
+    } else if (metric === 'water') {
+      value = dayEvents
+        .filter((e) => e.type === 'water')
+        .reduce((s, e) => s + (e.amountMl ?? 0), 0)
+    } else if (metric === 'sleep') {
+      value = dayEvents
+        .filter((e) => e.type === 'sleep')
+        .reduce((s, e) => s + sleepMinutes(e), 0)
+    } else {
+      value = dayEvents.filter((e) => e.type === 'diaper').length
+    }
+    days.push({
+      key,
+      label: `${d.getMonth() + 1}/${d.getDate()}`,
+      value,
+    })
+  }
+
+  const values = days.map((d) => d.value)
+  const max = Math.max(1, ...values)
+  const min = Math.min(...values)
+  const avg = Math.round(values.reduce((s, v) => s + v, 0) / values.length)
+  const meta = TREND_METRICS.find((m) => m.key === metric)
+  const picked = days.findIndex((d) => d.key === selectedDay)
+
+  const W = 340
+  const H = 168
+  const padL = 8
+  const padR = 8
+  const padT = 22
+  const padB = 24
+  const innerW = W - padL - padR
+  const innerH = H - padT - padB
+  const gap = range === 7 ? 12 : 4
+  const barW = Math.max(4, (innerW - gap * (days.length - 1)) / days.length)
+
+  const fmt = (v: number) => {
+    if (metric === 'sleep') return formatMinutes(v)
+    return `${v} ${meta?.unit ?? ''}`
+  }
+
+  const pickedDay = picked >= 0 ? days[picked] : null
+
+  return (
+    <div className="trend-panel">
+      <div className="trend-head">
+        <div>
+          <div className="trend-title">
+            {pickedDay ? pickedDay.label : meta?.label}
+          </div>
+          <div className="trend-sub">
+            {pickedDay ? '点柱子可切换日期' : `近 ${range} 天平均`}
+          </div>
+        </div>
+        <div className="trend-hero">
+          <strong>{pickedDay ? fmt(pickedDay.value) : fmt(avg)}</strong>
+        </div>
+      </div>
+
+      <svg
+        className="trend-chart"
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label={`${meta?.label}趋势图`}
+      >
+        <line
+          x1={padL}
+          y1={padT + innerH}
+          x2={W - padR}
+          y2={padT + innerH}
+          stroke="var(--separator)"
+          strokeWidth="1"
+        />
+        {days.map((d, i) => {
+          const h = d.value <= 0 ? 2 : Math.max(4, (d.value / max) * innerH)
+          const x = padL + i * (barW + gap)
+          const y = padT + innerH - h
+          const isPicked = picked === i
+          const showLabel =
+            range === 7
+              ? true
+              : i === 0 || i === days.length - 1 || i === Math.floor(days.length / 2)
+          const showValue = range === 7 || isPicked
+          return (
+            <g
+              key={d.key}
+              className="trend-bar-hit"
+              onClick={() => onPickDay?.(d.key)}
+            >
+              <rect
+                x={x - gap / 2}
+                y={padT}
+                width={barW + gap}
+                height={innerH}
+                fill="transparent"
+              />
+              <rect
+                x={x}
+                y={y}
+                width={barW}
+                height={h}
+                rx={Math.min(4, barW / 2)}
+                fill="var(--blue)"
+                opacity={d.value > 0 ? (isPicked ? 1 : 0.35) : 0.18}
+              />
+              {showValue && (
+                <text
+                  x={x + barW / 2}
+                  y={y - 6}
+                  textAnchor="middle"
+                  fontSize={range === 7 ? 10 : 11}
+                  fontWeight="600"
+                  fill={isPicked ? 'var(--blue)' : 'var(--ink-secondary)'}
+                >
+                  {metric === 'sleep' ? Math.round(d.value) : d.value}
+                </text>
+              )}
+              {showLabel && (
+                <text
+                  x={x + barW / 2}
+                  y={H - 6}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fill={isPicked ? 'var(--blue)' : 'var(--ink-tertiary)'}
+                >
+                  {d.label}
+                </text>
+              )}
+            </g>
+          )
+        })}
+      </svg>
+
+      <div className="trend-stats">
+        <div className="trend-stat">
+          <div className="k">最高</div>
+          <div className="v">{fmt(max)}</div>
+        </div>
+        <div className="trend-stat">
+          <div className="k">平均</div>
+          <div className="v">{fmt(avg)}</div>
+        </div>
+        <div className="trend-stat">
+          <div className="k">最低</div>
+          <div className="v">{fmt(min)}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SummaryTiles({ events }: { events: BabyEvent[] }) {
   const milkTotal = events
     .filter((e) => e.type === 'milk')
@@ -86,6 +352,11 @@ function SummaryTiles({ events }: { events: BabyEvent[] }) {
   const lastMilk = events.find((e) => e.type === 'milk')
   const lastSleep = events.find((e) => e.type === 'sleep')
   const wake = events.find((e) => e.type === 'wake')
+
+  // 上次吃奶结束时刻（没填结束时间就用开始）
+  const lastMilkAt = lastMilk ? (lastMilk.endAt ?? lastMilk.startAt) : null
+  // 上次清醒时刻：起床事件，或上一觉睡醒
+  const lastAwakeAt = wake?.startAt ?? lastSleep?.endAt ?? null
 
   return (
     <div className="summary-grid">
@@ -100,6 +371,7 @@ function SummaryTiles({ events }: { events: BabyEvent[] }) {
             ? `${formatTime(lastMilk.startAt)}${lastMilk.amountMl != null ? ` · ${lastMilk.amountMl}` : ''}`
             : '—'}
         </div>
+        <ElapsedHint label="距上次" from={lastMilkAt} />
       </div>
       <div className="summary-tile">
         <div className="label">最近睡眠</div>
@@ -110,6 +382,7 @@ function SummaryTiles({ events }: { events: BabyEvent[] }) {
               : `睡着中 · ${formatDuration(lastSleep.startAt)}`
             : '—'}
         </div>
+        <ElapsedHint label="已清醒" from={lastAwakeAt} />
       </div>
       <div className="summary-tile">
         <div className="label">今日起床</div>
@@ -320,6 +593,22 @@ function EventSheet({
   )
   const [note, setNote] = useState(edit?.note ?? '')
   const [solidTypes, setSolidTypes] = useState<string[]>(() => loadSolidTypes())
+  const [solidSelected, setSolidSelected] = useState<string[]>(() => {
+    const parts = (edit?.note ?? '')
+      .split(/[、,，]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const presets = loadSolidTypes()
+    return parts.filter((p) => presets.includes(p))
+  })
+  const [solidCustom, setSolidCustom] = useState(() => {
+    const parts = (edit?.note ?? '')
+      .split(/[、,，]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const presets = loadSolidTypes()
+    return parts.filter((p) => !presets.includes(p)).join('、')
+  })
   const [editingSolidTypes, setEditingSolidTypes] = useState(false)
   const [newSolidType, setNewSolidType] = useState('')
 
@@ -331,6 +620,15 @@ function EventSheet({
   const amountMax = type === 'water' ? 500 : 2000
   const showAmount = type === 'milk' || type === 'water'
   const showNoteField = !['bath_swim', 'diaper', 'solid'].includes(type)
+  const solidNote = [...solidSelected, ...(solidCustom.trim() ? [solidCustom.trim()] : [])].join(
+    '、',
+  )
+
+  const toggleSolid = (value: string) => {
+    setSolidSelected((prev) =>
+      prev.includes(value) ? prev.filter((t) => t !== value) : [...prev, value],
+    )
+  }
 
   const addSolidType = () => {
     const value = newSolidType.trim()
@@ -345,7 +643,7 @@ function EventSheet({
     const next = solidTypes.filter((t) => t !== value)
     setSolidTypes(next)
     saveSolidTypes(next)
-    if (note === value) setNote('')
+    setSolidSelected((prev) => prev.filter((t) => t !== value))
   }
 
   return (
@@ -370,9 +668,15 @@ function EventSheet({
           />
         </div>
 
-        {(type === 'sleep' || type === 'outing') && (
+        {(type === 'sleep' || type === 'outing' || type === 'milk') && (
           <div className="field">
-            <label>{type === 'sleep' ? '结束（睡醒后再填）' : '结束（可选）'}</label>
+            <label>
+              {type === 'sleep'
+                ? '结束（睡醒后再填）'
+                : type === 'milk'
+                  ? '结束时间（可选）'
+                  : '结束（可选）'}
+            </label>
             <input
               type="datetime-local"
               value={endAt}
@@ -444,7 +748,7 @@ function EventSheet({
         {type === 'solid' && (
           <div className="field">
             <div className="row-between">
-              <label>辅食类型（可点选）</label>
+              <label>辅食类型（可多选）</label>
               <button
                 type="button"
                 className="btn-ghost"
@@ -458,10 +762,10 @@ function EventSheet({
                 <span key={p} style={{ display: 'inline-flex', alignItems: 'center' }}>
                   <button
                     type="button"
-                    className={`chip${note === p ? ' active' : ''}`}
+                    className={`chip${solidSelected.includes(p) ? ' active' : ''}`}
                     onClick={() => {
                       if (editingSolidTypes) return
-                      setNote(p)
+                      toggleSolid(p)
                     }}
                   >
                     {p}
@@ -503,9 +807,17 @@ function EventSheet({
             )}
             {!editingSolidTypes && (
               <div className="muted small" style={{ marginTop: 8 }}>
-                点「编辑类型」可增删选项；也可在下方备注写自定义
+                可同时点选多项；点「编辑类型」可增删选项
               </div>
             )}
+            <div style={{ marginTop: 10 }}>
+              <label>其他 / 备注</label>
+              <input
+                value={solidCustom}
+                onChange={(e) => setSolidCustom(e.target.value)}
+                placeholder="例如：南瓜泥"
+              />
+            </div>
           </div>
         )}
 
@@ -545,20 +857,18 @@ function EventSheet({
           </div>
         )}
 
-        {(showNoteField || type === 'solid') && (
+        {showNoteField && (
           <div className="field">
-            <label>{type === 'solid' ? '自定义辅食 / 备注' : '备注（可选）'}</label>
+            <label>备注（可选）</label>
             <input
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder={
                 type === 'milk'
                   ? '例如：亲喂 / 配方奶（也可点上方类型）'
-                  : type === 'solid'
-                    ? '例如：南瓜泥'
-                    : type === 'sleep'
-                      ? '例如：午睡'
-                      : '选填'
+                  : type === 'sleep'
+                    ? '例如：午睡'
+                    : '选填'
               }
             />
           </div>
@@ -574,7 +884,7 @@ function EventSheet({
                 startAt: fromLocalInputValue(startAt),
                 endAt: endAt ? fromLocalInputValue(endAt) : null,
                 amountMl: showAmount ? amountMl : null,
-                note: note || null,
+                note: type === 'solid' ? solidNote || null : note || null,
                 createdBy: edit?.createdBy || profileName,
               })
             }}
@@ -781,6 +1091,22 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('home')
   const [sheet, setSheet] = useState<Sheet>(null)
   const [historyDay, setHistoryDay] = useState(todayKey())
+  const [trendEnd, setTrendEnd] = useState(todayKey())
+  const [trendRange, setTrendRange] = useState<7 | 30>(7)
+  const [trendMetric, setTrendMetric] = useState<TrendMetric>('milk')
+
+  // 选中某天；若不在当前曲线窗口内，则把曲线窗口移到该天
+  const selectHistoryDay = useCallback(
+    (day: string) => {
+      setHistoryDay(day)
+      const end = new Date(`${trendEnd}T12:00:00`)
+      const start = new Date(end)
+      start.setDate(end.getDate() - (trendRange - 1))
+      const target = new Date(`${day}T12:00:00`)
+      if (target > end || target < start) setTrendEnd(day)
+    },
+    [trendEnd, trendRange],
+  )
   const [toast, setToast] = useState('')
   // 云端写入中的本地记录，刷新时保留，避免被慢同步冲掉
   const pendingEventsRef = useRef<Map<string, BabyEvent>>(new Map())
@@ -813,9 +1139,40 @@ export default function App() {
   const familyId = data?.user?.familyId ?? null
   useEffect(() => {
     if (!familyId || familyId === 'local-family') return
-    return subscribeFamily(familyId, () => {
-      void refresh()
+    let timer: number | null = null
+    const unsub = subscribeFamily(familyId, () => {
+      // 合并短时间内的多次变更，避免刷太猛
+      if (timer) window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        void refresh()
+      }, 250)
     })
+    return () => {
+      if (timer) window.clearTimeout(timer)
+      unsub()
+    }
+  }, [familyId, refresh])
+
+  // 回到页面时立刻同步一次
+  useEffect(() => {
+    const syncIfVisible = () => {
+      if (document.visibilityState === 'visible') void refresh()
+    }
+    window.addEventListener('focus', syncIfVisible)
+    document.addEventListener('visibilitychange', syncIfVisible)
+    return () => {
+      window.removeEventListener('focus', syncIfVisible)
+      document.removeEventListener('visibilitychange', syncIfVisible)
+    }
+  }, [refresh])
+
+  // WebSocket 不稳定时的兜底：前台每 25 秒静默拉一次
+  useEffect(() => {
+    if (!familyId || familyId === 'local-family') return
+    const id = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void refresh()
+    }, 25000)
+    return () => window.clearInterval(id)
   }, [familyId, refresh])
 
   useEffect(() => {
@@ -1109,16 +1466,116 @@ export default function App() {
             </p>
           </header>
           <div className="page">
-            <div className="card" style={{ padding: 16 }}>
-              <label className="muted small">选择日期</label>
-              <input
-                type="date"
-                value={historyDay}
-                onChange={(e) => setHistoryDay(e.target.value)}
-                style={{ marginTop: 8 }}
+            <div className="card history-toolbar">
+              <div className="history-date-row">
+                <button
+                  type="button"
+                  className="history-nav-btn"
+                  aria-label="前一天"
+                  onClick={() => {
+                    const d = new Date(`${historyDay}T12:00:00`)
+                    d.setDate(d.getDate() - 1)
+                    selectHistoryDay(todayKey(d))
+                  }}
+                >
+                  ‹
+                </button>
+                <input
+                  type="date"
+                  value={historyDay}
+                  onChange={(e) => {
+                    if (e.target.value) selectHistoryDay(e.target.value)
+                  }}
+                  aria-label="选择日期"
+                />
+                <button
+                  type="button"
+                  className="history-nav-btn"
+                  aria-label="后一天"
+                  onClick={() => {
+                    const d = new Date(`${historyDay}T12:00:00`)
+                    d.setDate(d.getDate() + 1)
+                    selectHistoryDay(todayKey(d))
+                  }}
+                >
+                  ›
+                </button>
+              </div>
+              <div className="chip-row" style={{ marginTop: 10 }}>
+                <button
+                  type="button"
+                  className={`chip${historyDay === todayKey() ? ' active' : ''}`}
+                  onClick={() => selectHistoryDay(todayKey())}
+                >
+                  今天
+                </button>
+                <button
+                  type="button"
+                  className="chip"
+                  onClick={() => {
+                    const d = new Date()
+                    d.setDate(d.getDate() - 1)
+                    selectHistoryDay(todayKey(d))
+                  }}
+                >
+                  昨天
+                </button>
+              </div>
+            </div>
+
+            <div className="section-title">{formatDayLabel(historyDay)} · 当日统计</div>
+            <DayStats events={historyEvents} />
+
+            <div className="section-title">变化曲线</div>
+            <div className="card trend-card">
+              <div className="segmented" role="tablist" aria-label="时间范围">
+                {([
+                  { v: 7 as const, t: '近 7 天' },
+                  { v: 30 as const, t: '近 30 天' },
+                ]).map((o) => (
+                  <button
+                    key={o.v}
+                    type="button"
+                    role="tab"
+                    aria-selected={trendRange === o.v}
+                    className={`segmented-item${trendRange === o.v ? ' active' : ''}`}
+                    onClick={() => setTrendRange(o.v)}
+                  >
+                    {o.t}
+                  </button>
+                ))}
+              </div>
+
+              <div className="segmented metric-seg" role="tablist" aria-label="统计维度">
+                {TREND_METRICS.map((m) => (
+                  <button
+                    key={m.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={trendMetric === m.key}
+                    className={`segmented-item${trendMetric === m.key ? ' active' : ''}`}
+                    onClick={() => setTrendMetric(m.key)}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+
+              <TrendChart
+                events={
+                  baby
+                    ? data.events.filter((e) => e.babyId === baby.id)
+                    : []
+                }
+                endDate={trendEnd}
+                selectedDay={historyDay}
+                range={trendRange}
+                metric={trendMetric}
+                onPickDay={selectHistoryDay}
               />
             </div>
-            <div className="section-title">{formatDayLabel(historyDay)}</div>
+
+            <div className="section-title">{formatDayLabel(historyDay)} · 明细</div>
             {renderTimeline(historyEvents)}
           </div>
         </>
@@ -1241,15 +1698,40 @@ export default function App() {
               <button
                 type="button"
                 className="list-row"
-                onClick={async () => {
-                  const payload = await loadData()
-                  const blob = new Blob([JSON.stringify(payload, null, 2)], {
-                    type: 'application/json',
-                  })
-                  const a = document.createElement('a')
-                  a.href = URL.createObjectURL(blob)
-                  a.download = `宝宝日记-${todayKey()}.json`
-                  a.click()
+                onClick={() => {
+                  try {
+                    const events = data?.events ?? []
+                    const babies = data?.babies ?? []
+                    const payload = {
+                      app: '宝宝日记',
+                      format: 'baby-diary-backup',
+                      version: 1,
+                      exportedAt: nowIso(),
+                      displayName: data?.displayName ?? '',
+                      babies,
+                      events,
+                      solidTypes: loadSolidTypes(),
+                    }
+                    const text = JSON.stringify(payload, null, 2)
+                    if (!text || text === '{}' || (!babies.length && !events.length)) {
+                      setToast('没有可导出的数据')
+                      return
+                    }
+                    const blob = new Blob([text], {
+                      type: 'application/json;charset=utf-8',
+                    })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `宝宝日记-${todayKey()}.json`
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    URL.revokeObjectURL(url)
+                    setToast(`已导出 ${events.length} 条记录`)
+                  } catch (e) {
+                    setToast(e instanceof Error ? e.message : '导出失败')
+                  }
                 }}
               >
                 <div>

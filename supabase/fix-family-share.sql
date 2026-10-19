@@ -201,3 +201,25 @@ create policy avatar_insert on storage.objects
   for insert with check (bucket_id = 'avatars');
 create policy avatar_update on storage.objects
   for update using (bucket_id = 'avatars');
+
+-- Realtime：家人改动后自动推送（详见 migrate-realtime.sql）
+do $$
+begin
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    create publication supabase_realtime;
+  end if;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.event;
+exception
+  when duplicate_object then null;
+end $$;
+
+do $$
+begin
+  alter publication supabase_realtime add table public.baby;
+exception
+  when duplicate_object then null;
+end $$;

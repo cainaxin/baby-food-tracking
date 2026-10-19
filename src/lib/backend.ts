@@ -527,7 +527,10 @@ export function subscribeFamily(
       { event: '*', schema: 'public', table: 'baby', filter: `family_id=eq.${familyId}` },
       () => onChange(),
     )
-    .subscribe()
+    .subscribe((status) => {
+      // 连上后先拉一次，避免订阅成功前已有更新
+      if (status === 'SUBSCRIBED') onChange()
+    })
   return () => {
     client.removeChannel(channel)
   }
