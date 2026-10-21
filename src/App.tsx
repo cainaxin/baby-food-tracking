@@ -33,7 +33,10 @@ import {
   todayKey,
   toLocalInputValue,
   fromLocalInputValue,
+  eventOverlapsDay,
+  sleepMinutesOnDay,
 } from './lib/time'
+import { buildInfo } from './generated/buildInfo'
 
 type Tab = 'home' | 'history' | 'settings'
 type Sheet =
@@ -61,22 +64,55 @@ function Avatar({
   )
 }
 
+function formatAboutTime(iso: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function isCrossDay(startIso: string, endIso: string): boolean {
+  return todayKey(new Date(startIso)) !== todayKey(new Date(endIso))
+}
+
+function formatSpan(startIso: string, endIso: string): string {
+  if (isCrossDay(startIso, endIso)) {
+    return `${formatTime(startIso)} – 次日 ${formatTime(endIso)}`
+  }
+  return `${formatTime(startIso)} – ${formatTime(endIso)}`
+}
+
+function isOngoingSpan(ev: BabyEvent): boolean {
+  return (
+    (ev.type === 'sleep' || ev.type === 'outing') && !ev.endAt
+  )
+}
+
+function eventOnDay(ev: BabyEvent, dayKey: string): boolean {
+  return eventOverlapsDay(ev.startAt, ev.endAt, dayKey, {
+    openEndedIsOngoing: isOngoingSpan(ev),
+  })
+}
+
 function eventSubtitle(ev: BabyEvent): string {
   const parts: string[] = []
   if ((ev.type === 'milk' || ev.type === 'water') && ev.amountMl != null) {
     parts.push(`${ev.amountMl} ml`)
   }
   if (ev.type === 'milk' && ev.endAt) {
-    parts.push(`${formatTime(ev.startAt)} – ${formatTime(ev.endAt)}`)
+    parts.push(formatSpan(ev.startAt, ev.endAt))
     parts.push(formatDuration(ev.startAt, ev.endAt))
   }
   if (ev.type === 'sleep' && ev.endAt) {
-    parts.push(`${formatTime(ev.startAt)} – ${formatTime(ev.endAt)}`)
+    parts.push(formatSpan(ev.startAt, ev.endAt))
+    if (isCrossDay(ev.startAt, ev.endAt)) parts.push('跨天')
     parts.push(formatDuration(ev.startAt, ev.endAt))
   } else if (ev.type === 'sleep') {
     parts.push(`从 ${formatTime(ev.startAt)} 起 · ${formatDuration(ev.startAt)}`)
   } else if (ev.type === 'outing' && ev.endAt) {
-    parts.push(`${formatTime(ev.startAt)} – ${formatTime(ev.endAt)}`)
+    parts.push(formatSpan(ev.startAt, ev.endAt))
+    if (isCrossDay(ev.startAt, ev.endAt)) parts.push('跨天')
   }
   if (ev.note) parts.push(ev.note)
   if (ev.createdBy) parts.push(ev.createdBy)
@@ -90,7 +126,8 @@ function ElapsedHint({ label, from }: { label: string; from: string | null }) {
   )
 }
 
-function sleepMinutes(ev: BabyEvent): number {
+function sleepMinutes(ev: BabyEvent, dayKey?: string): number {
+  if (dayKey) return sleepMinutesOnDay(ev.startAt, ev.endAt, dayKey)
   const start = new Date(ev.startAt).getTime()
   const end = ev.endAt ? new Date(ev.endAt).getTime() : Date.now()
   return Math.max(0, Math.round((end - start) / 60000))
@@ -104,7 +141,7 @@ function formatMinutes(mins: number): string {
   return m ? `${h} 小时 ${m} 分` : `${h} 小时`
 }
 
-function dayStats(events: BabyEvent[]) {
+function dayStats(events: BabyEvent[], dayKey: string) {
   const milkMl = events
     .filter((e) => e.type === 'milk')
     .reduce((s, e) => s + (e.amountMl ?? 0), 0)
@@ -113,7 +150,7 @@ function dayStats(events: BabyEvent[]) {
     .reduce((s, e) => s + (e.amountMl ?? 0), 0)
   const sleepMin = events
     .filter((e) => e.type === 'sleep')
-    .reduce((s, e) => s + sleepMinutes(e), 0)
+    .reduce((s, e) => s + sleepMinutes(e, dayKey), 0)
   return {
     milkMl,
     waterMl,
@@ -133,8 +170,8 @@ const TREND_METRICS: { key: TrendMetric; label: string; unit: string }[] = [
   { key: 'water', label: '喝水', unit: 'ml' },
 ]
 
-function DayStats({ events }: { events: BabyEvent[] }) {
-  const s = dayStats(events)
+function DayStats({ events, dayKey }: { events: BabyEvent[]; dayKey: string }) {
+  const s = dayStats(events, dayKey)
   return (
     <div className="summary-grid">
       <div className="summary-tile">
@@ -188,7 +225,8 @@ function TrendChart({
     const d = new Date(end)
     d.setDate(end.getDate() - i)
     const key = todayKey(d)
-    const dayEvents = events.filter((e) => todayKey(new Date(e.startAt)) === key)
+    // 与该日有重叠的事件都算（跨夜睡眠拆到各日）
+    const dayEvents = events.filter((e) => eventOnDay(e, key))
     let value = 0
     if (metric === 'milk') {
       value = dayEvents
@@ -199,9 +237,9 @@ function TrendChart({
         .filter((e) => e.type === 'water')
         .reduce((s, e) => s + (e.amountMl ?? 0), 0)
     } else if (metric === 'sleep') {
-      value = dayEvents
+      value = events
         .filter((e) => e.type === 'sleep')
-        .reduce((s, e) => s + sleepMinutes(e), 0)
+        .reduce((s, e) => s + sleepMinutesOnDay(e.startAt, e.endAt, key), 0)
     } else {
       value = dayEvents.filter((e) => e.type === 'diaper').length
     }
@@ -345,12 +383,22 @@ function TrendChart({
   )
 }
 
-function SummaryTiles({ events }: { events: BabyEvent[] }) {
+function SummaryTiles({
+  events,
+  allEvents,
+}: {
+  events: BabyEvent[]
+  allEvents: BabyEvent[]
+}) {
   const milkTotal = events
     .filter((e) => e.type === 'milk')
     .reduce((sum, e) => sum + (e.amountMl ?? 0), 0)
   const lastMilk = events.find((e) => e.type === 'milk')
-  const lastSleep = events.find((e) => e.type === 'sleep')
+  // 跨夜睡眠从昨天开始：状态要看全部事件里最近一条 sleep，不能只看今日
+  const sortedSleeps = allEvents
+    .filter((e) => e.type === 'sleep')
+    .sort((a, b) => b.startAt.localeCompare(a.startAt))
+  const lastSleep = sortedSleeps[0]
   const wake = events.find((e) => e.type === 'wake')
 
   // 上次吃奶结束时刻（没填结束时间就用开始）
@@ -360,7 +408,7 @@ function SummaryTiles({ events }: { events: BabyEvent[] }) {
   const lastAwakeAt = (() => {
     if (isSleeping) return null
     let latest: string | null = null
-    for (const e of events) {
+    for (const e of allEvents) {
       const t = e.type === 'wake' ? e.startAt : e.type === 'sleep' ? e.endAt : null
       if (t && (!latest || t > latest)) latest = t
     }
@@ -387,10 +435,13 @@ function SummaryTiles({ events }: { events: BabyEvent[] }) {
         <div className="value" style={{ fontSize: 18 }}>
           {lastSleep
             ? lastSleep.endAt
-              ? `${formatTime(lastSleep.startAt)}–${formatTime(lastSleep.endAt)}`
+              ? formatSpan(lastSleep.startAt, lastSleep.endAt)
               : `睡着中 · ${formatDuration(lastSleep.startAt)}`
             : '—'}
         </div>
+        {lastSleep && lastSleep.endAt && isCrossDay(lastSleep.startAt, lastSleep.endAt) && (
+          <div className="elapsed-hint">跨天</div>
+        )}
         <ElapsedHint label="已清醒" from={lastAwakeAt} />
       </div>
       <div className="summary-tile">
@@ -681,7 +732,7 @@ function EventSheet({
           <div className="field">
             <label>
               {type === 'sleep'
-                ? '结束（睡醒后再填）'
+                ? '结束（睡醒后再填，可跨到第二天）'
                 : type === 'milk'
                   ? '结束时间（可选）'
                   : '结束（可选）'}
@@ -1199,14 +1250,19 @@ export default function App() {
     if (!data || !baby) return []
     const key = todayKey()
     return data.events
-      .filter((e) => e.babyId === baby.id && todayKey(new Date(e.startAt)) === key)
+      .filter((e) => e.babyId === baby.id && eventOnDay(e, key))
       .sort((a, b) => b.startAt.localeCompare(a.startAt))
+  }, [data, baby])
+
+  const babyEvents = useMemo(() => {
+    if (!data || !baby) return []
+    return data.events.filter((e) => e.babyId === baby.id)
   }, [data, baby])
 
   const historyEvents = useMemo(() => {
     if (!data || !baby) return []
     return data.events
-      .filter((e) => e.babyId === baby.id && todayKey(new Date(e.startAt)) === historyDay)
+      .filter((e) => e.babyId === baby.id && eventOnDay(e, historyDay))
       .sort((a, b) => b.startAt.localeCompare(a.startAt))
   }, [data, baby, historyDay])
 
@@ -1221,13 +1277,20 @@ export default function App() {
       return
     }
 
+    const startAt = payload.startAt ?? nowIso()
+    const endAt = payload.endAt ?? null
+    if (endAt && new Date(endAt).getTime() <= new Date(startAt).getTime()) {
+      setToast('结束时间要晚于开始时间')
+      return
+    }
+
     const optimisticId = editId ?? `local-${crypto.randomUUID()}`
     const optimistic: BabyEvent = {
       id: optimisticId,
       babyId,
       type: payload.type,
-      startAt: payload.startAt ?? nowIso(),
-      endAt: payload.endAt ?? null,
+      startAt,
+      endAt,
       amountMl: payload.amountMl ?? null,
       note: payload.note ?? null,
       createdBy: payload.createdBy || data.displayName,
@@ -1235,17 +1298,34 @@ export default function App() {
         (editId && data.events.find((e) => e.id === editId)?.createdAt) || nowIso(),
     }
 
+    // 记「起床」时回填最近一条未结束睡眠的 endAt
+    let backfillSleep: BabyEvent | null = null
+    if (payload.type === 'wake' && !editId) {
+      const openSleep = data.events
+        .filter((e) => e.babyId === babyId && e.type === 'sleep' && !e.endAt)
+        .sort((a, b) => b.startAt.localeCompare(a.startAt))[0]
+      if (openSleep) {
+        backfillSleep = { ...openSleep, endAt: startAt }
+      }
+    }
+
     // 先本地秒回：立刻改界面并关掉弹窗，不等网络
     pendingEventsRef.current.set(optimisticId, optimistic)
+    if (backfillSleep) {
+      pendingEventsRef.current.set(backfillSleep.id, backfillSleep)
+    }
     setData((prev) => {
       if (!prev) return prev
+      let events = prev.events
       if (editId) {
-        return {
-          ...prev,
-          events: prev.events.map((e) => (e.id === editId ? optimistic : e)),
-        }
+        events = events.map((e) => (e.id === editId ? optimistic : e))
+      } else {
+        events = [optimistic, ...events]
       }
-      return { ...prev, events: [optimistic, ...prev.events] }
+      if (backfillSleep) {
+        events = events.map((e) => (e.id === backfillSleep!.id ? backfillSleep! : e))
+      }
+      return { ...prev, events }
     })
     setSheet(null)
 
@@ -1283,6 +1363,38 @@ export default function App() {
           }
           return { ...prev, events: [event, ...withoutTemp] }
         })
+      }
+
+      if (backfillSleep) {
+        const { error: bfError, event: bfEvent } = await saveEvent(
+          {
+            id: backfillSleep.id,
+            type: 'sleep',
+            startAt: backfillSleep.startAt,
+            endAt: backfillSleep.endAt,
+            amountMl: backfillSleep.amountMl,
+            note: backfillSleep.note,
+            createdBy: backfillSleep.createdBy,
+            babyId,
+          },
+          data.currentBabyId,
+          data.displayName,
+        )
+        pendingEventsRef.current.delete(backfillSleep.id)
+        if (bfError) {
+          setToast(bfError)
+          void refresh()
+          return
+        }
+        if (bfEvent) {
+          setData((prev) => {
+            if (!prev) return prev
+            return {
+              ...prev,
+              events: prev.events.map((e) => (e.id === bfEvent.id ? bfEvent : e)),
+            }
+          })
+        }
       }
     })()
   }
@@ -1421,7 +1533,7 @@ export default function App() {
                 </div>
 
                 <div className="section-title">今日状态</div>
-                <SummaryTiles events={todayEvents} />
+                <SummaryTiles events={todayEvents} allEvents={babyEvents} />
 
                 <div className="section-title">今日时间线</div>
                 {renderTimeline(todayEvents)}
@@ -1533,7 +1645,7 @@ export default function App() {
             </div>
 
             <div className="section-title">{formatDayLabel(historyDay)} · 当日统计</div>
-            <DayStats events={historyEvents} />
+            <DayStats events={historyEvents} dayKey={historyDay} />
 
             <div className="section-title">变化曲线</div>
             <div className="card trend-card">
@@ -1765,6 +1877,34 @@ export default function App() {
                 </div>
                 <div className="muted">›</div>
               </button>
+            </div>
+
+            <div className="section-title">关于</div>
+            <div className="card" style={{ padding: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 600 }}>宝宝日记</div>
+                  <div className="muted small">家庭共用的作息记录</div>
+                </div>
+                <div className="pill">v{buildInfo.version}</div>
+              </div>
+              <div className="muted small" style={{ marginTop: 12, lineHeight: 1.7 }}>
+                <div>Commit：{buildInfo.commit}</div>
+                {buildInfo.commitTime && (
+                  <div>提交时间：{formatAboutTime(buildInfo.commitTime)}</div>
+                )}
+                {buildInfo.buildTime && (
+                  <div>发布构建：{formatAboutTime(buildInfo.buildTime)}</div>
+                )}
+              </div>
+              {buildInfo.releaseNotes && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 8 }}>本版更新</div>
+                  <div className="muted small" style={{ lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                    {buildInfo.releaseNotes}
+                  </div>
+                </div>
+              )}
             </div>
 
             <p className="muted small" style={{ textAlign: 'center', marginTop: 24 }}>
