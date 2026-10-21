@@ -355,8 +355,17 @@ function SummaryTiles({ events }: { events: BabyEvent[] }) {
 
   // 上次吃奶结束时刻（没填结束时间就用开始）
   const lastMilkAt = lastMilk ? (lastMilk.endAt ?? lastMilk.startAt) : null
-  // 上次清醒时刻：起床事件，或上一觉睡醒
-  const lastAwakeAt = wake?.startAt ?? lastSleep?.endAt ?? null
+  // 睡着中不算清醒时长；睡醒后从最近一次「起床/睡醒」重新计时
+  const isSleeping = Boolean(lastSleep && !lastSleep.endAt)
+  const lastAwakeAt = (() => {
+    if (isSleeping) return null
+    let latest: string | null = null
+    for (const e of events) {
+      const t = e.type === 'wake' ? e.startAt : e.type === 'sleep' ? e.endAt : null
+      if (t && (!latest || t > latest)) latest = t
+    }
+    return latest
+  })()
 
   return (
     <div className="summary-grid">

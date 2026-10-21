@@ -30,6 +30,7 @@ npm run lint       # eslint
 - **样式**：iOS 风格（`#F2F2F7` 底、白卡片、`#0A84FF` 主色）。CSS 变量在 `src/styles/global.css`；勿写死品牌色。
 - **时间**：展示用本地时间 `HH:mm`；存储 ISO 字符串。
 - **校验**：只在边界校验（奶量 0–2000、必填时间）；信任内部 store。
+- **提交与变更记录**：每次修改完成后必须 `git commit` 以便追溯，并同步更新 `CHANGELOG.md`。
 
 ## Supabase / 部署
 
