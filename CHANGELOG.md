@@ -2,14 +2,6 @@
 
 ## Unreleased
 
-### 修复（2026-11-01）：OpenWrt 入口「能看不能改」
-
-- **现象**：`http://nxhome.cloud:3006` 可查看数据，但「记一笔 / 保存」写不进云端。
-- **根因**：`handleSaveEvent` 用 `crypto.randomUUID()` 生成乐观 ID；该 API 仅 HTTPS 安全上下文可用，HTTP 下抛 `TypeError`，云端写入根本未发起。
-- **原因**：家宽自部署是 HTTP；HTTPS 的 Vercel 站点不暴露此问题，代码里已有 `uid()` 却未复用。
-- **修复**：`src/App.tsx` 改用 `src/lib/store.ts` 的 `uid()`（`Date.now` + `Math.random`），HTTP / HTTPS 均可保存。
-- **禁止事项**：HTTP 部署的前端不得无保护调用 `crypto.randomUUID` / `navigator.clipboard` 等安全上下文 API。
-
 ### 部署（2026-11-01）
 
 - **家宽入口上线**：前端静态包部署到 OpenWrt（iStoreOS / i5），`http://nxhome.cloud:3006`，国内手机无 VPN 可访问。
@@ -21,14 +13,38 @@
 
 - **现象**：部署过程中家里网全断（与关闭 TTYD 网页无关，时间巧合）。
 - **根因**：在 **iStoreOS 主路由** 上执行 `docker run -p 3006:80`（Docker 改写 iptables）+ 随后 `/etc/init.d/firewall restart`，与 OpenWrt fw3/fw4 冲突，NAT/转发损坏。
-- **错误决策**：不应在主路由上用带端口映射的 Docker；更不应在 Docker 后重启防火墙。
-- **恢复**：`docker stop/rm baby-web` → `docker stop docker` → `firewall restart` + `network restart`；无效则断电重启软路由。
+- **错误决策**：不应在主路由器上用带端口映射的 Docker；更不应在 Docker 后重启防火墙。
+- **恢复**：`docker stop/rm baby-web` → `docker stop docker` → `firewall restart` + `network restart`；无效则断电重启路由器。
 - **后续约束**：主路由上网稳定优先；宝宝站再上线须用「不碰 iptables」方案（见项目 MEMORY.md）。
 
 ### 规则
 
 - **AGENTS.md**：修改需 commit + 更新 CHANGELOG（含**为什么改**）；自测通过后 push 远程。
 - **关键环境/事故/决策**必须写入 CHANGELOG 与项目 MEMORY，保证新对话可续做。
+
+---
+
+## v0.2.2
+
+HTTP 家宽入口可以正常「记一笔」了。
+
+### 修复
+
+- **能看不能改**：`http://` 入口下新建记录时调用 `crypto.randomUUID()`（仅 HTTPS 可用）抛 `TypeError`，写入未发起。改为 `uid()`（`Date.now` + `Math.random`），HTTP / HTTPS 均可保存。
+
+### 原因
+
+- OpenWrt 家宽入口是 `http://nxhome.cloud:3006`，非安全上下文；HTTPS 的 Vercel 站点不暴露此问题。
+- 本地模式已在用 `uid()`，云端乐观 ID 却单独调了 `crypto.randomUUID`。
+
+### 禁止事项
+
+- HTTP 部署的前端不得无保护调用 `crypto.randomUUID` / `navigator.clipboard` 等安全上下文 API。
+
+### 升级说明
+
+- GitHub Release：`v0.2.2` / `home-dist-v2`（`baby-dist-v2.tar.gz`）。
+- OpenWrt：解压覆盖 `/root/baby-food-tracker/dist` 后刷新 PWA；不必动 Docker / 防火墙。
 
 ---
 
