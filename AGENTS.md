@@ -30,7 +30,8 @@ npm run lint       # eslint
 - **样式**：iOS 风格（`#F2F2F7` 底、白卡片、`#0A84FF` 主色）。CSS 变量在 `src/styles/global.css`；勿写死品牌色。
 - **时间**：展示用本地时间 `HH:mm`；存储 ISO 字符串。
 - **校验**：只在边界校验（奶量 0–2000、必填时间）；信任内部 store。
-- **提交与变更记录**：每次修改完成后必须 `git commit` 以便追溯，并同步更新 `CHANGELOG.md`。
+- **提交与变更记录**：每次修改完成后必须 `git commit` 便于追溯，并同步更新 `CHANGELOG.md`（写清**改了什么、为什么改**）。
+- **按天归档**：改动、事故、关键决策写入 `docs/journal/YYYY-MM-DD.md`；失败案例必须含「现象 / 原因 / 反思 / 禁止事项」。同步维护 `docs/journal/INDEX.md`（关键词索引），新对话先查 INDEX 再动手。
 - **推送**：改好版本并自测通过后，必须 `git push` 到远程，避免本地修复未上线。
 
 ## Supabase / 部署
