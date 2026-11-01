@@ -1285,7 +1285,7 @@ export default function App() {
       return
     }
 
-    // crypto.randomUUID 仅 HTTPS 安全上下文可用；家宽 http 入口需用兼容实现
+    // crypto.randomUUID 仅 HTTPS 可用；家宽 http 入口需用兼容 uid()
     const optimisticId = editId ?? `local-${uid()}`
     const optimistic: BabyEvent = {
       id: optimisticId,
