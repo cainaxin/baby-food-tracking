@@ -47,6 +47,14 @@ type Sheet =
   | { kind: 'join' }
   | null
 
+/** 保存成功后的确认弹窗数据（展示刚写入的记录，可撤销重编辑） */
+type SavedConfirm = {
+  event: BabyEvent
+  isEdit: boolean
+  /** 记「起床」时回填关闭的睡眠，一并提示 */
+  backfillNote?: string
+}
+
 function Avatar({
   baby,
   size = 'md',
@@ -1146,6 +1154,87 @@ function JoinSheet({
   )
 }
 
+/** 保存成功后的确认弹窗：展示刚记的内容，可关闭或重新编辑 */
+function SaveConfirmSheet({
+  confirm,
+  babyName,
+  onDismiss,
+  onReedit,
+}: {
+  confirm: SavedConfirm
+  babyName?: string
+  onDismiss: () => void
+  onReedit: () => void
+}) {
+  const { event, isEdit, backfillNote } = confirm
+  const meta = EVENT_META[event.type]
+  const detail = eventSubtitle(event)
+  const dayKey = todayKey(new Date(event.startAt))
+  const timeLabel =
+    dayKey === todayKey()
+      ? formatTime(event.startAt)
+      : `${formatDayLabel(dayKey)} ${formatTime(event.startAt)}`
+
+  return (
+    <div className="sheet-backdrop" onClick={onDismiss}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" />
+        <div style={{ textAlign: 'center', padding: '2px 8px 0' }}>
+          <div style={{ fontSize: 44, lineHeight: 1 }}>✅</div>
+          <h2 className="sheet-title" style={{ marginTop: 10 }}>
+            {isEdit ? '已保存修改' : '记录成功'}
+          </h2>
+          {babyName && (
+            <p className="muted small" style={{ margin: '6px 0 0' }}>
+              已记到「{babyName}」
+            </p>
+          )}
+        </div>
+
+        <div className="card" style={{ marginTop: 16, padding: 16, textAlign: 'left' }}>
+          <div className="row" style={{ gap: 12, alignItems: 'flex-start' }}>
+            <div className="dot" style={{ background: `${meta.color}22`, flexShrink: 0 }}>
+              <span>{meta.icon}</span>
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 17 }}>
+                {meta.label}
+                {event.note ? ` · ${event.note}` : ''}
+              </div>
+              <div className="muted small" style={{ marginTop: 4, lineHeight: 1.5 }}>
+                {timeLabel}
+                {detail && detail !== formatTime(event.startAt) ? ` · ${detail}` : ''}
+              </div>
+            </div>
+          </div>
+          {backfillNote && (
+            <div
+              className="muted small"
+              style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--fill)' }}
+            >
+              {backfillNote}
+            </div>
+          )}
+        </div>
+
+        <div className="stack" style={{ marginTop: 18 }}>
+          <button type="button" className="btn btn-primary" onClick={onDismiss}>
+            知道了
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ width: '100%', minHeight: 52, borderRadius: 14 }}
+            onClick={onReedit}
+          >
+            记错了，重新编辑
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [booting, setBooting] = useState(true)
   const [data, setData] = useState<AppData | null>(null)
@@ -1169,6 +1258,8 @@ export default function App() {
     [trendEnd, trendRange],
   )
   const [toast, setToast] = useState('')
+  /** 保存成功确认弹窗：展示刚记入的内容，可关闭或重新编辑 */
+  const [savedConfirm, setSavedConfirm] = useState<SavedConfirm | null>(null)
   // 云端写入中的本地记录，刷新时保留，避免被慢同步冲掉
   const pendingEventsRef = useRef<Map<string, BabyEvent>>(new Map())
   const pendingDeletesRef = useRef<Set<string>>(new Set())
@@ -1330,6 +1421,13 @@ export default function App() {
       return { ...prev, events }
     })
     setSheet(null)
+    setSavedConfirm({
+      event: optimistic,
+      isEdit: Boolean(editId),
+      backfillNote: backfillSleep
+        ? `同时已关闭睡眠记录，睡到 ${formatTime(backfillSleep.endAt!)}`
+        : undefined,
+    })
 
     // 后台同步云端；失败再提示并拉回真相
     void (async () => {
@@ -1349,11 +1447,16 @@ export default function App() {
       )
       pendingEventsRef.current.delete(optimisticId)
       if (error) {
+        setSavedConfirm(null)
         setToast(error)
         void refresh()
         return
       }
       if (event) {
+        // 新建时云端会分配真实 id，同步到确认弹窗，保证「重新编辑」能找到记录
+        setSavedConfirm((prev) =>
+          prev && prev.event.id === optimisticId ? { ...prev, event } : prev,
+        )
         setData((prev) => {
           if (!prev) return prev
           const withoutTemp = prev.events.filter((e) => e.id !== optimisticId)
@@ -1953,6 +2056,19 @@ export default function App() {
         >
           {toast}
         </div>
+      )}
+
+      {savedConfirm && (
+        <SaveConfirmSheet
+          confirm={savedConfirm}
+          babyName={baby?.name}
+          onDismiss={() => setSavedConfirm(null)}
+          onReedit={() => {
+            const ev = savedConfirm.event
+            setSavedConfirm(null)
+            setSheet({ kind: 'event', type: ev.type, editId: ev.id })
+          }}
+        />
       )}
 
       {sheet?.kind === 'event' && (
