@@ -7,6 +7,7 @@ import {
   QUICK_TYPES,
 } from './types'
 import { loadSolidTypes, saveSolidTypes } from './lib/solidTypes'
+import { uid } from './lib/store'
 import {
   addBaby,
   deleteBaby,
@@ -1284,7 +1285,8 @@ export default function App() {
       return
     }
 
-    const optimisticId = editId ?? `local-${crypto.randomUUID()}`
+    // crypto.randomUUID 仅 HTTPS 安全上下文可用；家宽 http 入口需用兼容实现
+    const optimisticId = editId ?? `local-${uid()}`
     const optimistic: BabyEvent = {
       id: optimisticId,
       babyId,

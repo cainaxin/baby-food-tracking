@@ -1,8 +1,8 @@
 // 由 scripts/build-info.mjs 在 build/dev 前生成，请勿手改
 export const buildInfo = {
   "version": "0.2.1",
-  "commit": "e7cfb85",
-  "commitTime": "2026-10-22T00:07:20+08:00",
-  "buildTime": "2026-10-24T14:44:23.738Z",
-  "releaseNotes": "## v0.2.1\n\n跨夜睡眠不再算错，界面可查版本与更新内容。\n\n### 修复\n- **跨天睡眠**：时间线与历史按「与当日重叠」展示，夜觉两天都能看到，并标「跨天」\n- **睡眠统计**：当日睡眠 / 趋势按重叠区间拆到各日（22:00–07:00 → 昨天 2h + 今天 7h）\n- **是否在睡**：看全部记录里最近一次睡觉，跨过午夜仍显示「睡着中」\n- **起床回填**：记「起床」时自动把上一条未结束睡眠的结束时间填为起床时刻\n- **时长校验**：结束时间必须晚于开始时间；未填结束的睡眠统计上限 18 小时\n- **展示**：跨夜区间显示「22:00 – 次日 07:00」\n\n### 功能\n- **关于**：「我的」页可查看版本号、Commit、构建时间、本版修复内容"
+  "commit": "8f8b3f0",
+  "commitTime": "2026-11-01T20:41:16+08:00",
+  "buildTime": "2026-11-01T12:54:46.761Z",
+  "releaseNotes": "## Unreleased\n\n### 部署（2026-11-01）\n\n- **家宽入口上线**：前端静态包部署到 OpenWrt（iStoreOS / i5），`http://nxhome.cloud:3006`，国内手机无 VPN 可访问。\n- **后端保持 Supabase**：登录 / 同步 / 实时仍用 `zxlcsmdsgqnsvcqpokdd.supabase.co`；根路径返回 `{\"error\":\"requested path is invalid\"}` 属正常，不代表不可用。\n- **原因**：`*.vercel.app` 在手机流量下打不开（电脑宽带常可打开），Vercel 管理台 `vercel.com` 可登录≠生产站可用。\n- **代码**：业务代码零改动；`npm run build` 后 `dist` 经 GitHub Release `home-dist-v1` 传到 OpenWrt，Docker `nginx:alpine` 托管。\n\n### 事故（2026-11-01）— 必须记住\n\n- **现象**：部署过程中家里网全断（与关闭 TTYD 网页无关，时间巧合）。\n- **根因**：在 **iStoreOS 主路由** 上执行 `docker run -p 3006:80`（Docker 改写 iptables）+ 随后 `/etc/init.d/firewall restart`，与 OpenWrt fw3/fw4 冲突，NAT/转发损坏。\n- **错误决策**：不应在主路由上用带端口映射的 Docker；更不应在 Docker 后重启防火墙。\n- **恢复**：`docker stop/rm baby-web` → `docker stop docker` → `firewall restart` + `network restart`；无效则断电重启软路由。\n- **后续约束**：主路由上网稳定优先；宝宝站再上线须用「不碰 iptables」方案（见项目 MEMORY.md）。\n\n### 规则\n\n- **AGENTS.md**：修改需 commit + 更新 CHANGELOG（含**为什么改**）；自测通过后 push 远程。\n- **关键环境/事故/决策**必须写入 CHANGELOG 与项目 MEMORY，保证新对话可续做。"
 } as const

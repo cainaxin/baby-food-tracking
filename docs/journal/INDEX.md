@@ -14,6 +14,7 @@
 |------|------|------|------|------|
 | 2026-11-01 | OpenWrt 部署静态站（保留 Supabase） | deploy, openwrt, nginx, supabase | 成功（3006 可登录） | [2026-11-01](./2026-11-01.md) |
 | 2026-11-01 | 主路由 Docker 端口映射导致全家断网 | **failure**, docker, iptables, firewall, outage, openwrt | 已恢复；禁止再犯 | [2026-11-01](./2026-11-01.md#事故主路由-docker--firewall-导致断网) |
+| 2026-11-01 | OpenWrt 入口能看不能改（HTTP 下 crypto.randomUUID） | bug, openwrt, http, crypto, secure-context, write | 已改用 uid() | [2026-11-01-openwrt-write](./2026-11-01-openwrt-write.md) |
 
 ## 标签约定
 
