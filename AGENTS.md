@@ -33,6 +33,7 @@ npm run lint       # eslint
 - **提交与变更记录**：每次修改完成后必须 `git commit` 便于追溯，并同步更新 `CHANGELOG.md`（写清**改了什么、为什么改**）。
 - **按天归档**：改动、事故、关键决策写入 `docs/journal/YYYY-MM-DD.md`；失败案例必须含「现象 / 原因 / 反思 / 禁止事项」。同步维护 `docs/journal/INDEX.md`（关键词索引），新对话先查 INDEX 再动手。
 - **推送**：改好版本并自测通过后，必须 `git push` 到远程，避免本地修复未上线。
+- **发版到 OpenWrt**：每次发版须让 Agent 自动完成，不要手动上传——`npm run build` → `tar -czf baby-dist-vX.tar.gz dist` → 用 GitHub API（凭据从 `git credential fill` 取 token）创建 Release 并上传 tar 包 → 在 OpenWrt 上 `wget` 下载后解压覆盖 `/root/baby-food-tracker/dist`。Tag 命名 `vX.Y.Z`，目标 commit 填 `main`。
 
 ## Supabase / 部署
 
