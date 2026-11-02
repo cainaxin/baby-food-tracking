@@ -81,6 +81,41 @@ function formatAboutTime(iso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+type NoteBlock = { kind: 'h2' | 'h3' | 'p' | 'li'; text: string }
+
+/** 把 CHANGELOG 片段拆成标题 / 段落 / 列表项，便于在「更新内容」里排版 */
+function parseReleaseNotes(md: string): NoteBlock[] {
+  if (!md) return []
+  const blocks: NoteBlock[] = []
+  for (const raw of md.split(/\r?\n/)) {
+    const line = raw.trim()
+    if (!line || line === '---') continue
+    if (line.startsWith('## ')) blocks.push({ kind: 'h2', text: line.slice(3) })
+    else if (line.startsWith('### ')) blocks.push({ kind: 'h3', text: line.slice(4) })
+    else if (line.startsWith('- ')) blocks.push({ kind: 'li', text: line.slice(2) })
+    else blocks.push({ kind: 'p', text: line })
+  }
+  return blocks
+}
+
+/** 渲染 **加粗** 与 `等宽` 内联标记 */
+function renderNoteInline(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g)
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+      return (
+        <code key={i} className="note-code">
+          {part.slice(1, -1)}
+        </code>
+      )
+    }
+    return part
+  })
+}
+
 function isCrossDay(startIso: string, endIso: string): boolean {
   return todayKey(new Date(startIso)) !== todayKey(new Date(endIso))
 }
@@ -1260,6 +1295,8 @@ export default function App() {
   const [toast, setToast] = useState('')
   /** 保存成功确认弹窗：展示刚记入的内容，可关闭或重新编辑 */
   const [savedConfirm, setSavedConfirm] = useState<SavedConfirm | null>(null)
+  /** 「关于」卡片选项卡：版本信息 / 更新内容 */
+  const [aboutTab, setAboutTab] = useState<'version' | 'notes'>('version')
   // 云端写入中的本地记录，刷新时保留，避免被慢同步冲掉
   const pendingEventsRef = useRef<Map<string, BabyEvent>>(new Map())
   const pendingDeletesRef = useRef<Set<string>>(new Set())
@@ -1993,21 +2030,49 @@ export default function App() {
                 </div>
                 <div className="pill">v{buildInfo.version}</div>
               </div>
-              <div className="muted small" style={{ marginTop: 12, lineHeight: 1.7 }}>
-                <div>Commit：{buildInfo.commit}</div>
-                {buildInfo.commitTime && (
-                  <div>提交时间：{formatAboutTime(buildInfo.commitTime)}</div>
-                )}
-                {buildInfo.buildTime && (
-                  <div>发布构建：{formatAboutTime(buildInfo.buildTime)}</div>
-                )}
+
+              <div className="segmented" role="tablist" aria-label="关于" style={{ marginTop: 14 }}>
+                {([
+                  { v: 'version' as const, t: '版本' },
+                  { v: 'notes' as const, t: '更新内容' },
+                ]).map((o) => (
+                  <button
+                    key={o.v}
+                    type="button"
+                    role="tab"
+                    aria-selected={aboutTab === o.v}
+                    className={`segmented-item${aboutTab === o.v ? ' active' : ''}`}
+                    onClick={() => setAboutTab(o.v)}
+                  >
+                    {o.t}
+                  </button>
+                ))}
               </div>
-              {buildInfo.releaseNotes && (
-                <div style={{ marginTop: 14 }}>
-                  <div style={{ fontWeight: 600, marginBottom: 8 }}>本版更新</div>
-                  <div className="muted small" style={{ lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-                    {buildInfo.releaseNotes}
-                  </div>
+
+              {aboutTab === 'version' ? (
+                <div className="muted small" style={{ marginTop: 14, lineHeight: 1.7 }}>
+                  <div>Commit：{buildInfo.commit}</div>
+                  {buildInfo.commitTime && (
+                    <div>提交时间：{formatAboutTime(buildInfo.commitTime)}</div>
+                  )}
+                  {buildInfo.buildTime && (
+                    <div>发布构建：{formatAboutTime(buildInfo.buildTime)}</div>
+                  )}
+                </div>
+              ) : (
+                <div className="about-notes">
+                  {parseReleaseNotes(buildInfo.releaseNotes).map((b, i) => {
+                    if (b.kind === 'h2') return <div key={i} className="note-h2">{b.text}</div>
+                    if (b.kind === 'h3') return <div key={i} className="note-h3">{b.text}</div>
+                    if (b.kind === 'li')
+                      return (
+                        <div key={i} className="note-li">
+                          <span className="note-dot" aria-hidden="true" />
+                          <span>{renderNoteInline(b.text)}</span>
+                        </div>
+                      )
+                    return <p key={i} className="note-p">{renderNoteInline(b.text)}</p>
+                  })}
                 </div>
               )}
             </div>
