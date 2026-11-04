@@ -253,7 +253,8 @@ export async function loadData(): Promise<AppData> {
   const [babiesRes, eventsRes] = await Promise.all([
     supabase
       .from('baby')
-      .select('id,name,avatar_color,avatar_url,birth_date,gender,weight_kg,height_cm,created_at')
+      // 用 * 全字段查询：数据库缺列时 select 列表报错会导致宝宝列表整个消失
+      .select('*')
       .eq('family_id', user.familyId)
       .order('created_at', { ascending: true }),
     supabase
