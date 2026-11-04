@@ -253,7 +253,7 @@ export async function loadData(): Promise<AppData> {
   const [babiesRes, eventsRes] = await Promise.all([
     supabase
       .from('baby')
-      .select('id,name,avatar_color,avatar_url,created_at')
+      .select('id,name,avatar_color,avatar_url,birth_date,gender,weight_kg,height_cm,created_at')
       .eq('family_id', user.familyId)
       .order('created_at', { ascending: true }),
     supabase

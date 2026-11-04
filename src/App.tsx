@@ -1538,7 +1538,7 @@ function DailySummaryCard({
           <input
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            placeholder="输入你的问题，例如：今天要喝多少水？"
+            placeholder="输入问题，如：今天要喝多少水？"
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault()
@@ -1551,8 +1551,9 @@ function DailySummaryCard({
             className="btn btn-primary ask-send"
             disabled={asking || !question.trim()}
             onClick={() => ask(question)}
+            aria-label="发送问题"
           >
-            {asking ? '…' : '问'}
+            {asking ? '…' : '➤'}
           </button>
         </div>
 
