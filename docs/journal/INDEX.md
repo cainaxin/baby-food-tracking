@@ -23,6 +23,10 @@
 | 2026-11-04 | v0.4.0 大版本：外出提醒/宝宝信息/AI 小结 | ui, outing, baby, ai, deepseek, security | 已完成 | [2026-11-04-v0.4.0](./2026-11-04-v0.4.0.md) |
 | 2026-11-04 | v0.4.1 每日小结：排版/共享缓存/历史支持 | ui, summary, ai, cache | 已完成 | [2026-11-04-v0.4.1](./2026-11-04-v0.4.1.md) |
 
+## 环境速查
+
+- **OpenWrt 下载 GitHub 资产用镜像**：`https://gh-proxy.com/https://github.com/...`（`mirror.ghproxy.com` / `ghfast.top` 常不可用）
+
 ## 标签约定
 
 - `failure`：失败案例，必须有「反思」与「禁止事项」
