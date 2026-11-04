@@ -401,7 +401,7 @@ export async function saveEvent(
   },
   currentBabyId: string | null,
   displayName: string,
-): Promise<{ event?: BabyEvent; error?: string }> {
+): Promise<{ event?: BabyEvent; error?: string; warning?: string }> {
   const babyId = payload.babyId || currentBabyId
   if (!babyId) return { error: '请先添加宝宝' }
 
@@ -443,8 +443,9 @@ export async function saveEvent(
 
   const user = await getSessionUser()
   if (!user?.familyId) return { error: '未加入家庭' }
+  const client = supabase
 
-  const body = {
+  const body: Record<string, unknown> = {
     family_id: user.familyId,
     baby_id: babyId,
     type: payload.type,
@@ -452,29 +453,40 @@ export async function saveEvent(
     end_at: payload.endAt ?? null,
     amount_ml: payload.amountMl ?? null,
     note: payload.note ?? null,
-    photo_url: payload.photoUrl ?? null,
     created_by: payload.createdBy || displayName,
     updated_at: nowIso(),
   }
+  // 只有真有照片才带 photo_url：数据库未加列时，普通记录不受影响
+  if (payload.photoUrl) body.photo_url = payload.photoUrl
 
-  if (payload.id) {
-    const { data, error } = await supabase
-      .from('event')
-      .update(body)
-      .eq('id', payload.id)
-      .eq('family_id', user.familyId)
-      .select('*')
-      .single()
-    if (error) return { error: error.message }
-    return { event: mapEvent(data) }
+  const run = () => {
+    if (payload.id) {
+      return client
+        .from('event')
+        .update(body)
+        .eq('id', payload.id)
+        .eq('family_id', user.familyId)
+        .select('*')
+        .single()
+    }
+    return client.from('event').insert(body).select('*').single()
   }
 
-  const { data, error } = await supabase
-    .from('event')
-    .insert(body)
-    .select('*')
-    .single()
-  if (error) return { error: error.message }
+  const { data, error } = await run()
+  if (error) {
+    // photo_url 列尚未迁移时降级：先保住记录，再提示迁移
+    if (payload.photoUrl && 'photo_url' in body) {
+      delete body.photo_url
+      const retry = await run()
+      if (retry.data) {
+        return {
+          event: mapEvent(retry.data),
+          warning: '记录已保存，但照片没存上：数据库需补 photo_url 字段',
+        }
+      }
+    }
+    return { error: error.message }
+  }
   return { event: mapEvent(data) }
 }
 

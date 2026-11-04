@@ -1578,7 +1578,7 @@ export default function App() {
 
     // 后台同步云端；失败再提示并拉回真相
     void (async () => {
-      const { error, event } = await saveEvent(
+      const { error, event, warning } = await saveEvent(
         {
           id: editId,
           type: payload.type,
@@ -1600,6 +1600,7 @@ export default function App() {
         void refresh()
         return
       }
+      if (warning) setToast(warning)
       if (event) {
         // 新建时云端会分配真实 id，同步到确认弹窗，保证「重新编辑」能找到记录
         setSavedConfirm((prev) =>

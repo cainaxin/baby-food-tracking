@@ -1,8 +1,8 @@
 // 由 scripts/build-info.mjs 在 build/dev 前生成，请勿手改
 export const buildInfo = {
-  "version": "0.3.0",
-  "commit": "c6d9f49",
-  "commitTime": "2026-11-04T09:24:13+08:00",
-  "buildTime": "2026-11-04T04:23:10.354Z",
-  "releaseNotes": "## v0.3.0\n\n辅食可以拍照记录了，每天吃啥有图可看。\n\n### 功能\n\n- **辅食拍照**：记辅食时可拍一张食物照片（相机或相册）；照片会压到约 1280px JPEG 后保存，本地模式存浏览器、云端存 Supabase `photo_url`。时间线、保存确认弹窗里都能看到照片缩略图/大图，编辑时可重新拍或移除。\n- **为什么**：辅食只记「米粉、果泥」看不出到底吃了啥；有照片后每天回顾更直观，老人也能看懂。\n- **实现要点**：新增 `src/lib/photo.ts` 压缩图片（Canvas，HTTP 入口可用）；`BabyEvent` / `event` 表增加 `photo_url` 字段（`schema.sql` 含 `alter table` 补列语句）；拍照 UI 在辅食表单内，两步内完成「拍 → 保存」。"
+  "version": "0.3.1",
+  "commit": "a581ba4",
+  "commitTime": "2026-11-04T12:23:19+08:00",
+  "buildTime": "2026-11-04T10:31:08.317Z",
+  "releaseNotes": "## v0.3.1\n\n修复 v0.3.0 所有记录保存报错的问题。\n\n### 修复\n\n- **所有记录保存失败**：v0.3.0 的 `saveEvent` 往**每条记录**的 body 里都带 `photo_url` 字段，但 Supabase 数据库还没执行 `alter table ... add column photo_url`，导致所有类型（吃奶、睡觉等）都被数据库拒绝（`Could not find the 'photo_url' column`）。\n- **原因**：代码假设数据库字段已存在，但实际用户侧的 Supabase 还没跑迁移 SQL；每次保存都触发了这个错误。\n- **实现要点**：\n  - `photo_url` 只在**真有照片**时才写入 body，普通记录不再带这个字段；\n  - 带照片的保存若因缺列报错，自动降级（去 `photo_url` 重试）保住记录本身，toast 提示\"照片没存上\"；\n  - 根治方案仍在 Supabase SQL Editor 执行 `alter table event add column if not exists photo_url text;`（见 `supabase/schema.sql`）。"
 } as const
