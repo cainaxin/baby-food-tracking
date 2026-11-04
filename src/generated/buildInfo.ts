@@ -1,8 +1,8 @@
 // 由 scripts/build-info.mjs 在 build/dev 前生成，请勿手改
 export const buildInfo = {
-  "version": "0.4.1",
-  "commit": "11d9a7a",
-  "commitTime": "2026-11-05T00:00:34+08:00",
-  "buildTime": "2026-11-04T16:09:29.415Z",
-  "releaseNotes": "## v0.4.1\n\n每日小结体验优化：排版更好看、全家共享、历史日期也能生成。\n\n### 功能\n\n- **小结排版优化**：内容分段展示，列表项带圆点标记，卡片更清爽；标题旁显示「已生成」徽章。\n- **全家共享**：生成一次后自动缓存（云端 `daily_summary` 表 / 本地 localStorage），家人打开就能看，不用重复调 AI 花钱；点「重新生成」可刷新。\n- **历史日期支持**：历史页切换到某天也能生成/查看该天小结，标题显示「X 月 X 日 · 每日小结」。\n- **为什么**：原版排版单调、每人打开都要重新生成浪费 API 额度、历史日期没法看小结。\n- **实现要点**：`daily_summary` 表按 `(baby_id, day_key)` 唯一缓存；`fetchDailySummary` 先查缓存再调 AI；Edge Function 不变。"
+  "version": "0.4.2",
+  "commit": "31cfcd1",
+  "commitTime": "2026-11-05T00:23:45+08:00",
+  "buildTime": "2026-11-04T16:27:18.716Z",
+  "releaseNotes": "## v0.4.2\n\n修复每日小结没走 AI、只显示本地降级文案的问题。\n\n### 修复\n\n- **小结未调用 AI**：前端用 `supabase.functions.invoke()` 调 Edge Function 失败（静默降级为本地模板文案），改为直接 `fetch` 调用 EF 接口（与验证通过的方式一致），并把错误打进 console 便于排查。\n- **为什么**：`invoke()` 在 HTTP 入口或某些环境下可能失败，而失败被 `catch` 吞掉后用户看到的是本地统计文案，误以为是 AI 生成的。\n- **实现要点**：`summary.ts` 改用 `fetch(`${supabaseUrl}/functions/v1/daily-summary`)`；`supabase.ts` 导出 `supabaseUrl` / `supabaseAnonKey`。"
 } as const

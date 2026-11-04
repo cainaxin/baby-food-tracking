@@ -11,6 +11,8 @@ const anonKey =
   (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) || FALLBACK_ANON_KEY
 
 export const isCloudConfigured = Boolean(url && anonKey)
+export const supabaseUrl = url
+export const supabaseAnonKey = anonKey
 
 export const supabase: SupabaseClient | null = isCloudConfigured
   ? createClient(url as string, anonKey as string, {

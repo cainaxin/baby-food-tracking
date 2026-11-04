@@ -1,5 +1,15 @@
 # 更新日志
 
+## v0.4.2
+
+修复每日小结没走 AI、只显示本地降级文案的问题。
+
+### 修复
+
+- **小结未调用 AI**：前端用 `supabase.functions.invoke()` 调 Edge Function 失败（静默降级为本地模板文案），改为直接 `fetch` 调用 EF 接口（与验证通过的方式一致），并把错误打进 console 便于排查。
+- **为什么**：`invoke()` 在 HTTP 入口或某些环境下可能失败，而失败被 `catch` 吞掉后用户看到的是本地统计文案，误以为是 AI 生成的。
+- **实现要点**：`summary.ts` 改用 `fetch(`${supabaseUrl}/functions/v1/daily-summary`)`；`supabase.ts` 导出 `supabaseUrl` / `supabaseAnonKey`。
+
 ## v0.4.1
 
 每日小结体验优化：排版更好看、全家共享、历史日期也能生成。

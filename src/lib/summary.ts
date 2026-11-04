@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { supabase, supabaseUrl, supabaseAnonKey } from './supabase'
 import { getDailySummary, saveDailySummary } from './backend'
 import type { Baby, BabyEvent } from '../types'
 import { sleepMinutesOnDay, outingMinutesOnDay, formatMonthAge } from './time'
@@ -114,19 +114,31 @@ export async function fetchDailySummary(
     return { summary: { text, stats } }
   }
 
-  // 3. 调 AI
+  // 3. 调 AI（直接 fetch 调 EF，避免 supabase.functions.invoke 兼容问题）
   try {
-    const { data, error } = await supabase.functions.invoke('daily-summary', {
-      body: { prompt: buildPrompt(baby, events, dayKey) },
+    const url = `${supabaseUrl}/functions/v1/daily-summary`
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${supabaseAnonKey}`,
+      },
+      body: JSON.stringify({ prompt: buildPrompt(baby, events, dayKey) }),
     })
-    if (error || !data?.text) {
+    if (!res.ok) {
+      console.warn('daily-summary EF error', res.status)
       return { summary: { text: fallbackSummary(baby, stats), stats } }
     }
-    const text = data.text as string
+    const data = await res.json()
+    const text = data?.text
+    if (!text || typeof text !== 'string') {
+      return { summary: { text: fallbackSummary(baby, stats), stats } }
+    }
     // 异步存缓存，不阻塞展示
     void saveDailySummary(baby.id, dayKey, text).catch(() => {})
     return { summary: { text, stats } }
-  } catch {
+  } catch (e) {
+    console.warn('daily-summary fetch error', e)
     return { summary: { text: fallbackSummary(baby, stats), stats } }
   }
 }
