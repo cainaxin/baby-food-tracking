@@ -758,6 +758,83 @@ textarea:focus {
   font-weight: 700;
 }
 
+.summary-card {
+  padding: 16px;
+  margin-top: 12px;
+}
+
+.summary-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.summary-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.summary-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #e8f8ee;
+  color: #1a7a3a;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.summary-btn {
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.summary-content {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--fill);
+  line-height: 1.8;
+  font-size: 15px;
+  color: var(--ink-secondary);
+}
+
+.summary-line {
+  margin: 2px 0;
+}
+
+.summary-gap {
+  height: 8px;
+}
+
+.summary-bullet {
+  display: flex;
+  gap: 8px;
+  margin: 3px 0;
+  padding-left: 4px;
+}
+
+.summary-dot {
+  flex-shrink: 0;
+  color: var(--blue);
+  font-weight: 700;
+}
+
+.summary-empty {
+  margin-top: 12px;
+  padding: 14px 0 4px;
+  text-align: center;
+}
+
 .danger-text {
   color: var(--red);
 }

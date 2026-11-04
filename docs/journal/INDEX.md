@@ -21,6 +21,7 @@
 | 2026-11-04 | 辅食拍照记录（表单 + 时间线 + 确认弹窗） | ui, solid, photo, event, storage | 已完成 | [2026-11-04-solid-photo](./2026-11-04-solid-photo.md) |
 | 2026-11-04 | **v0.3.0 所有记录保存失败**（photo_url 未迁移） | **failure**, bug, supabase, schema, photo, save | v0.3.1 热修 | [2026-11-04-v0.3.1-fix](./2026-11-04-v0.3.1-fix.md) |
 | 2026-11-04 | v0.4.0 大版本：外出提醒/宝宝信息/AI 小结 | ui, outing, baby, ai, deepseek, security | 已完成 | [2026-11-04-v0.4.0](./2026-11-04-v0.4.0.md) |
+| 2026-11-04 | v0.4.1 每日小结：排版/共享缓存/历史支持 | ui, summary, ai, cache | 已完成 | [2026-11-04-v0.4.1](./2026-11-04-v0.4.1.md) |
 
 ## 标签约定
 

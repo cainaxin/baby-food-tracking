@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { getDailySummary, saveDailySummary } from './backend'
 import type { Baby, BabyEvent } from '../types'
 import { sleepMinutesOnDay, outingMinutesOnDay, formatMonthAge } from './time'
 
@@ -72,15 +73,14 @@ function buildPrompt(baby: Baby, events: BabyEvent[], dayKey: string): string {
 }
 
 /**
- * 调用 AI 生成每日总结。
- * 优先走 Supabase Edge Function（key 在服务端，安全）；
- * 未部署 EF 时降级为本地统计文本，不暴露任何 API key。
+ * 调用 AI 生成每日总结（带缓存）。
+ * 先查缓存（全家共享），没有才调 AI；结果存回缓存。
  */
 export async function fetchDailySummary(
   baby: Baby,
   events: BabyEvent[],
   dayKey: string,
-): Promise<{ summary?: DailySummary; error?: string }> {
+): Promise<{ summary?: DailySummary; error?: string; fromCache?: boolean }> {
   const stats = {
     milkMl: events
       .filter((e) => e.type === 'milk')
@@ -98,24 +98,33 @@ export async function fetchDailySummary(
     solid: events.filter((e) => e.type === 'solid').length,
   }
 
-  if (!supabase) {
-    return { summary: { text: fallbackSummary(baby, stats), stats } }
+  // 1. 先查缓存
+  try {
+    const cached = await getDailySummary(baby.id, dayKey)
+    if (cached.text) {
+      return { summary: { text: cached.text, stats }, fromCache: true }
+    }
+  } catch {
+    // 缓存查询失败不阻塞生成
   }
 
+  // 2. 本地模式或无 AI 时降级
+  if (!supabase) {
+    const text = fallbackSummary(baby, stats)
+    return { summary: { text, stats } }
+  }
+
+  // 3. 调 AI
   try {
     const { data, error } = await supabase.functions.invoke('daily-summary', {
-      body: {
-        prompt: buildPrompt(baby, events, dayKey),
-      },
+      body: { prompt: buildPrompt(baby, events, dayKey) },
     })
-    if (error) {
-      // Edge Function 未部署时降级
+    if (error || !data?.text) {
       return { summary: { text: fallbackSummary(baby, stats), stats } }
     }
-    const text = data?.text
-    if (!text) {
-      return { summary: { text: fallbackSummary(baby, stats), stats } }
-    }
+    const text = data.text as string
+    // 异步存缓存，不阻塞展示
+    void saveDailySummary(baby.id, dayKey, text).catch(() => {})
     return { summary: { text, stats } }
   } catch {
     return { summary: { text: fallbackSummary(baby, stats), stats } }

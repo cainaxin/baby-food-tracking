@@ -37,6 +37,27 @@ alter table baby add column if not exists gender text;
 alter table baby add column if not exists weight_kg numeric;
 alter table baby add column if not exists height_cm numeric;
 
+-- 每日小结缓存（全家共享，避免重复生成）
+create table if not exists daily_summary (
+  id uuid primary key default gen_random_uuid(),
+  family_id uuid not null references family(id) on delete cascade,
+  baby_id uuid not null references baby(id) on delete cascade,
+  day_key text not null,
+  text text not null,
+  created_by text,
+  created_at timestamptz not null default now(),
+  unique (baby_id, day_key)
+);
+
+alter table daily_summary enable row level security;
+
+create policy daily_summary_select on daily_summary
+  for select using (is_family_member(family_id));
+
+create policy daily_summary_write on daily_summary
+  for all using (is_family_member(family_id))
+  with check (is_family_member(family_id));
+
 create table if not exists event (
   id uuid primary key default gen_random_uuid(),
   family_id uuid not null references family(id) on delete cascade,

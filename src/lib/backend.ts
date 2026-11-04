@@ -595,4 +595,72 @@ export function subscribeFamily(
   }
 }
 
+// ===== 每日小结缓存（全家共享）=====
+
+const SUMMARY_KEY = 'baby-tracker-summaries'
+
+function loadLocalSummaries(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(SUMMARY_KEY) || '{}')
+  } catch {
+    return {}
+  }
+}
+
+function saveLocalSummaries(map: Record<string, string>) {
+  try {
+    localStorage.setItem(SUMMARY_KEY, JSON.stringify(map))
+  } catch {
+    // ignore
+  }
+}
+
+export async function getDailySummary(
+  babyId: string,
+  dayKey: string,
+): Promise<{ text?: string; error?: string }> {
+  if (!supabase) {
+    const map = loadLocalSummaries()
+    return { text: map[`${babyId}:${dayKey}`] }
+  }
+  const user = await getSessionUser()
+  if (!user?.familyId) return { error: '未加入家庭' }
+  const { data, error } = await supabase
+    .from('daily_summary')
+    .select('text')
+    .eq('baby_id', babyId)
+    .eq('day_key', dayKey)
+    .maybeSingle()
+  if (error) return { error: error.message }
+  return { text: data?.text ?? undefined }
+}
+
+export async function saveDailySummary(
+  babyId: string,
+  dayKey: string,
+  text: string,
+): Promise<{ error?: string }> {
+  if (!supabase) {
+    const map = loadLocalSummaries()
+    map[`${babyId}:${dayKey}`] = text
+    saveLocalSummaries(map)
+    return {}
+  }
+  const user = await getSessionUser()
+  if (!user?.familyId) return { error: '未加入家庭' }
+  const { error } = await supabase
+    .from('daily_summary')
+    .upsert(
+      {
+        family_id: user.familyId,
+        baby_id: babyId,
+        day_key: dayKey,
+        text,
+        created_by: user.displayName,
+      },
+      { onConflict: 'baby_id,day_key' },
+    )
+  return error ? { error: error.message } : {}
+}
+
 export { emptyStore }

@@ -9,6 +9,7 @@ import {
 import { loadSolidTypes, saveSolidTypes } from './lib/solidTypes'
 import { compressImage } from './lib/photo'
 import { fetchDailySummary, type DailySummary } from './lib/summary'
+import { saveDailySummary } from './lib/backend'
 import { uid } from './lib/store'
 import {
   addBaby,
@@ -1389,76 +1390,105 @@ function JoinSheet({
   )
 }
 
-/** 保存成功后的确认弹窗：展示刚记的内容，可关闭或重新编辑 */
+/** 每日小结卡片：自动加载缓存，支持重新生成，全家共享 */
 function DailySummaryCard({
   baby,
   events,
   dayKey,
+  title,
 }: {
   baby: Baby
   events: BabyEvent[]
   dayKey: string
+  title?: string
 }) {
   const [summary, setSummary] = useState<DailySummary | null>(null)
   const [loading, setLoading] = useState(false)
-  const [expanded, setExpanded] = useState(false)
+  const [fromCache, setFromCache] = useState(false)
 
-  const load = async () => {
+  // 切换日期 / 宝宝时自动加载缓存
+  useEffect(() => {
+    let cancelled = false
+    setSummary(null)
+    setFromCache(false)
+    ;(async () => {
+      try {
+        const r = await fetchDailySummary(baby, events, dayKey)
+        if (!cancelled && r.summary) {
+          setSummary(r.summary)
+          setFromCache(Boolean(r.fromCache))
+        }
+      } catch {
+        // ignore
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baby.id, dayKey])
+
+  const regenerate = async () => {
     setLoading(true)
     try {
+      // 先清缓存再生成
+      await saveDailySummary(baby.id, dayKey, '')
       const { summary: s } = await fetchDailySummary(baby, events, dayKey)
-      if (s) setSummary(s)
+      if (s) {
+        setSummary(s)
+        setFromCache(false)
+      }
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="card" style={{ padding: 16 }}>
-      <div className="row-between">
+    <div className="card summary-card">
+      <div className="summary-card-head">
         <div>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>每日小结</div>
-          <div className="muted small">根据今天的记录，给你建议</div>
+          <div className="summary-card-title">
+            {title || '每日小结'}
+            {fromCache && <span className="summary-badge">已生成</span>}
+          </div>
+          <div className="muted small">
+            {summary ? (fromCache ? '全家共享，不用重复生成' : '刚刚生成') : '根据当天记录，给你建议'}
+          </div>
         </div>
-        {!summary && (
-          <button
-            type="button"
-            className="btn btn-secondary"
-            style={{ minHeight: 44, padding: '0 16px', borderRadius: 12 }}
-            disabled={loading}
-            onClick={load}
-          >
-            {loading ? '分析中…' : '生成小结'}
-          </button>
-        )}
-        {summary && (
-          <button
-            type="button"
-            className="btn-ghost"
-            onClick={() => setExpanded((v) => !v)}
-          >
-            {expanded ? '收起' : '展开'}
-          </button>
-        )}
-      </div>
-      {summary && expanded && (
-        <div
-          style={{
-            marginTop: 12,
-            paddingTop: 12,
-            borderTop: '1px solid var(--fill)',
-            lineHeight: 1.75,
-            fontSize: 15,
-          }}
+        <button
+          type="button"
+          className="btn btn-secondary summary-btn"
+          disabled={loading}
+          onClick={summary ? regenerate : undefined}
         >
-          {summary.text.split('\n').map((line, i) => (
-            <p key={i} style={{ margin: '4px 0' }}>{line}</p>
-          ))}
+          {loading ? '分析中…' : summary ? '重新生成' : '生成小结'}
+        </button>
+      </div>
+
+      {summary && (
+        <div className="summary-content">
+          {summary.text.split('\n').map((line, i) => {
+            const trimmed = line.trim()
+            if (!trimmed) return <div key={i} className="summary-gap" />
+            // 以「-」或「•」开头的行渲染为列表项
+            if (/^[-•·]\s*/.test(trimmed)) {
+              return (
+                <div key={i} className="summary-bullet">
+                  <span className="summary-dot" aria-hidden>•</span>
+                  <span>{trimmed.replace(/^[-•·]\s*/, '')}</span>
+                </div>
+              )
+            }
+            return (
+              <p key={i} className="summary-line">{trimmed}</p>
+            )
+          })}
         </div>
       )}
-      {summary && !expanded && (
-        <div className="muted small" style={{ marginTop: 8 }}>
-          {summary.text.slice(0, 60)}…
+
+      {!summary && !loading && (
+        <div className="summary-empty muted small">
+          点「生成小结」，AI 会根据今天的奶量、睡眠等数据给建议
         </div>
       )}
     </div>
@@ -2128,6 +2158,15 @@ export default function App() {
 
             <div className="section-title">{formatDayLabel(historyDay)} · 当日统计</div>
             <DayStats events={historyEvents} dayKey={historyDay} />
+
+            {baby && (
+              <DailySummaryCard
+                baby={baby}
+                events={historyEvents}
+                dayKey={historyDay}
+                title={`${formatDayLabel(historyDay)} · 每日小结`}
+              />
+            )}
 
             <div className="section-title">变化曲线</div>
             <div className="card trend-card">
