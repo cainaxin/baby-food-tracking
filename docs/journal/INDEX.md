@@ -18,6 +18,7 @@
 | 2026-11-01 | OpenWrt 入口能看不能改（HTTP 下 crypto.randomUUID） | bug, openwrt, http, crypto, secure-context, write | 已改用 uid() | [2026-11-01-openwrt-write](./2026-11-01-openwrt-write.md) |
 | 2026-11-02 | 关于页改为「版本/更新内容」选项卡 | ui, about, changelog, tabs | 已完成 | [2026-11-02](./2026-11-02.md) |
 | 2026-11-04 | 外出按时长统计（统计卡片 + 趋势曲线 + 明细） | ui, stats, outing, duration, trend | 已完成 | [2026-11-04](./2026-11-04.md) |
+| 2026-11-04 | 辅食拍照记录（表单 + 时间线 + 确认弹窗） | ui, solid, photo, event, storage | 已完成 | [2026-11-04-solid-photo](./2026-11-04-solid-photo.md) |
 
 ## 标签约定
 

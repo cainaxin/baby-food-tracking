@@ -7,6 +7,7 @@ import {
   QUICK_TYPES,
 } from './types'
 import { loadSolidTypes, saveSolidTypes } from './lib/solidTypes'
+import { compressImage } from './lib/photo'
 import { uid } from './lib/store'
 import {
   addBaby,
@@ -733,6 +734,9 @@ function EventSheet({
   })
   const [editingSolidTypes, setEditingSolidTypes] = useState(false)
   const [newSolidType, setNewSolidType] = useState('')
+  const [photoUrl, setPhotoUrl] = useState<string | null>(edit?.photoUrl ?? null)
+  const [photoLoading, setPhotoLoading] = useState(false)
+  const [photoError, setPhotoError] = useState('')
 
   const bathPresets = [
     { label: '洗澡', value: '洗澡' },
@@ -940,6 +944,85 @@ function EventSheet({
                 placeholder="例如：南瓜泥"
               />
             </div>
+
+            <div className="field" style={{ marginTop: 10 }}>
+              <label>拍照记录（可选）</label>
+              {photoUrl ? (
+                <div>
+                  <img
+                    src={photoUrl}
+                    alt="辅食照片"
+                    className="solid-photo"
+                  />
+                  <div className="row-between" style={{ marginTop: 8 }}>
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      onClick={() => setPhotoUrl(null)}
+                    >
+                      移除照片
+                    </button>
+                    <label className="btn-ghost" style={{ cursor: 'pointer' }}>
+                      重新拍
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        style={{ display: 'none' }}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0]
+                          e.target.value = ''
+                          if (!file) return
+                          setPhotoLoading(true)
+                          setPhotoError('')
+                          try {
+                            setPhotoUrl(await compressImage(file))
+                          } catch {
+                            setPhotoError('照片处理失败，可再试一次')
+                          } finally {
+                            setPhotoLoading(false)
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              ) : (
+                <label className="photo-pick" style={{ cursor: 'pointer' }}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    style={{ display: 'none' }}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      e.target.value = ''
+                      if (!file) return
+                      setPhotoLoading(true)
+                      setPhotoError('')
+                      try {
+                        setPhotoUrl(await compressImage(file))
+                      } catch {
+                        setPhotoError('照片处理失败，可再试一次')
+                      } finally {
+                        setPhotoLoading(false)
+                      }
+                    }}
+                  />
+                  <div className="photo-pick-icon" aria-hidden>
+                    {photoLoading ? '⏳' : '📷'}
+                  </div>
+                  <div className="muted small">
+                    {photoLoading ? '正在处理照片…' : '点这里拍辅食照片'}
+                  </div>
+                </label>
+              )}
+              {photoError && (
+                <div className="muted small" style={{ color: 'var(--red)', marginTop: 6 }}>
+                  {photoError}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -1007,6 +1090,7 @@ function EventSheet({
                 endAt: endAt ? fromLocalInputValue(endAt) : null,
                 amountMl: showAmount ? amountMl : null,
                 note: type === 'solid' ? solidNote || null : note || null,
+                photoUrl: type === 'solid' ? photoUrl : edit?.photoUrl ?? null,
                 createdBy: edit?.createdBy || profileName,
               })
             }}
@@ -1260,6 +1344,13 @@ function SaveConfirmSheet({
               </div>
             </div>
           </div>
+          {event.photoUrl && (
+            <img
+              src={event.photoUrl}
+              alt="辅食照片"
+              className="confirm-photo"
+            />
+          )}
           {backfillNote && (
             <div
               className="muted small"
@@ -1441,6 +1532,7 @@ export default function App() {
       endAt,
       amountMl: payload.amountMl ?? null,
       note: payload.note ?? null,
+      photoUrl: payload.photoUrl ?? null,
       createdBy: payload.createdBy || data.displayName,
       createdAt:
         (editId && data.events.find((e) => e.id === editId)?.createdAt) || nowIso(),
@@ -1494,6 +1586,7 @@ export default function App() {
           endAt: optimistic.endAt,
           amountMl: optimistic.amountMl,
           note: optimistic.note,
+          photoUrl: optimistic.photoUrl,
           createdBy: optimistic.createdBy,
           babyId,
         },
@@ -1636,6 +1729,9 @@ export default function App() {
                 <div className="timeline-meta">
                   {formatTime(ev.startAt)} · {eventSubtitle(ev)}
                 </div>
+                {ev.photoUrl && (
+                  <img src={ev.photoUrl} alt="辅食照片" className="timeline-photo" />
+                )}
               </div>
             </button>
           )

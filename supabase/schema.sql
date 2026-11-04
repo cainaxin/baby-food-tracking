@@ -38,10 +38,14 @@ create table if not exists event (
   end_at timestamptz,
   amount_ml integer check (amount_ml is null or (amount_ml >= 0 and amount_ml <= 2000)),
   note text,
+  photo_url text,
   created_by text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- 辅食拍照：给已有库补列
+alter table event add column if not exists photo_url text;
 
 create index if not exists event_baby_start_idx on event (baby_id, start_at desc);
 create index if not exists baby_family_idx on baby (family_id);

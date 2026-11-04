@@ -26,6 +26,8 @@ export interface BabyEvent {
   endAt?: string | null
   amountMl?: number | null
   note?: string | null
+  /** 辅食照片（data URL 或云端公开 URL） */
+  photoUrl?: string | null
   createdBy: string
   createdAt: string
 }

@@ -49,6 +49,7 @@ type EventRow = {
   end_at?: string | null
   amount_ml?: number | null
   note?: string | null
+  photo_url?: string | null
   created_by?: string | null
   created_at: string
 }
@@ -72,6 +73,7 @@ function mapEvent(row: EventRow): BabyEvent {
     endAt: row.end_at || null,
     amountMl: row.amount_ml ?? null,
     note: row.note ?? null,
+    photoUrl: row.photo_url ?? null,
     createdBy: row.created_by ?? '',
     createdAt: row.created_at,
   }
@@ -392,6 +394,7 @@ export async function saveEvent(
     endAt?: string | null
     amountMl?: number | null
     note?: string | null
+    photoUrl?: string | null
     createdBy?: string
     babyId?: string
     id?: string
@@ -415,6 +418,7 @@ export async function saveEvent(
                 endAt: payload.endAt ?? null,
                 amountMl: payload.amountMl ?? null,
                 note: payload.note ?? null,
+                photoUrl: payload.photoUrl ?? null,
               }
             : e,
         ),
@@ -429,6 +433,7 @@ export async function saveEvent(
       endAt: payload.endAt ?? null,
       amountMl: payload.amountMl ?? null,
       note: payload.note ?? null,
+      photoUrl: payload.photoUrl ?? null,
       createdBy: payload.createdBy || displayName,
       createdAt: nowIso(),
     }
@@ -447,6 +452,7 @@ export async function saveEvent(
     end_at: payload.endAt ?? null,
     amount_ml: payload.amountMl ?? null,
     note: payload.note ?? null,
+    photo_url: payload.photoUrl ?? null,
     created_by: payload.createdBy || displayName,
     updated_at: nowIso(),
   }
