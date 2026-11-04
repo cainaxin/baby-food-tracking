@@ -1971,14 +1971,15 @@ export default function App() {
     },
     babyId?: string,
   ) => {
-    const { error } = babyId ? await updateBaby(babyId, payload) : await addBaby(payload)
+    const { error, warning } = babyId ? await updateBaby(babyId, payload) : await addBaby(payload)
     if (error) {
       setToast(error)
       return
     }
     setSheet(null)
     await refresh()
-    if (!babyId) setToast('已添加宝宝')
+    if (warning) setToast(warning)
+    else if (!babyId) setToast('已添加宝宝')
   }
 
   const handleDeleteBaby = async (id: string) => {

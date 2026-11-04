@@ -291,7 +291,7 @@ export async function addBaby(input: {
   gender?: 'boy' | 'girl' | null
   weightKg?: number | null
   heightCm?: number | null
-}): Promise<{ baby?: Baby; error?: string }> {
+}): Promise<{ baby?: Baby; error?: string; warning?: string }> {
   if (!supabase) {
     const baby: Baby = {
       id: uid(),
@@ -314,6 +314,7 @@ export async function addBaby(input: {
 
   const user = await getSessionUser()
   if (!user?.familyId) return { error: '未加入家庭' }
+  const client = supabase
 
   let avatarUrl = input.avatarUrl ?? null
   if (avatarUrl && avatarUrl.startsWith('data:')) {
@@ -333,12 +334,27 @@ export async function addBaby(input: {
   if (input.weightKg != null) row.weight_kg = input.weightKg
   if (input.heightCm != null) row.height_cm = input.heightCm
 
-  const { data, error } = await supabase
-    .from('baby')
-    .insert(row)
-    .select('*')
-    .single()
-  if (error) return { error: error.message }
+  const tryInsert = (r: Record<string, unknown>) =>
+    client.from('baby').insert(r).select('*').single()
+
+  const { data, error } = await tryInsert(row)
+  if (error) {
+    // 数据库缺列时降级：去掉新字段重试，保住基本保存
+    const extraKeys = ['birth_date', 'gender', 'weight_kg', 'height_cm']
+    const hasExtra = extraKeys.some((k) => k in row)
+    if (hasExtra) {
+      const base: Record<string, unknown> = { ...row }
+      for (const k of extraKeys) delete base[k]
+      const retry = await tryInsert(base)
+      if (retry.data) {
+        return {
+          baby: mapBaby(retry.data),
+          warning: '基本资料已保存，但性别/体重/身高未存上：数据库需补字段',
+        }
+      }
+    }
+    return { error: error.message }
+  }
   return { baby: mapBaby(data) }
 }
 
@@ -353,7 +369,7 @@ export async function updateBaby(
     weightKg?: number | null
     heightCm?: number | null
   },
-): Promise<{ baby?: Baby; error?: string }> {
+): Promise<{ baby?: Baby; error?: string; warning?: string }> {
   if (!supabase) {
     await localPatch((s) => ({
       ...s,
@@ -377,6 +393,7 @@ export async function updateBaby(
 
   const user = await getSessionUser()
   if (!user?.familyId) return { error: '未加入家庭' }
+  const client = supabase
 
   let avatarUrl = input.avatarUrl ?? null
   if (avatarUrl && avatarUrl.startsWith('data:')) {
@@ -395,14 +412,33 @@ export async function updateBaby(
   if (input.weightKg !== undefined) row.weight_kg = input.weightKg
   if (input.heightCm !== undefined) row.height_cm = input.heightCm
 
-  const { data, error } = await supabase
-    .from('baby')
-    .update(row)
-    .eq('id', id)
-    .eq('family_id', user.familyId)
-    .select('*')
-    .single()
-  if (error) return { error: error.message }
+  const tryUpdate = (r: Record<string, unknown>) =>
+    client
+      .from('baby')
+      .update(r)
+      .eq('id', id)
+      .eq('family_id', user.familyId)
+      .select('*')
+      .single()
+
+  const { data, error } = await tryUpdate(row)
+  if (error) {
+    // 数据库缺列时降级：去掉新字段重试
+    const extraKeys = ['birth_date', 'gender', 'weight_kg', 'height_cm']
+    const hasExtra = extraKeys.some((k) => k in row)
+    if (hasExtra) {
+      const base: Record<string, unknown> = { ...row }
+      for (const k of extraKeys) delete base[k]
+      const retry = await tryUpdate(base)
+      if (retry.data) {
+        return {
+          baby: mapBaby(retry.data),
+          warning: '基本资料已保存，但性别/体重/身高未存上：数据库需补字段',
+        }
+      }
+    }
+    return { error: error.message }
+  }
   return { baby: mapBaby(data) }
 }
 
