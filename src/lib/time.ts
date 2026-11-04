@@ -33,6 +33,21 @@ export function formatDayLabel(key: string): string {
   return `${Number(m)} 月 ${Number(d)} 日`
 }
 
+/** 从生日算月龄，如 "3 个月"、"1 岁 2 个月" */
+export function formatMonthAge(birthDate: string | null | undefined): string {
+  if (!birthDate) return ''
+  const birth = new Date(birthDate)
+  if (Number.isNaN(birth.getTime())) return ''
+  const now = new Date()
+  let months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth())
+  if (now.getDate() < birth.getDate()) months--
+  if (months < 0) return ''
+  if (months < 12) return `${months} 个月`
+  const y = Math.floor(months / 12)
+  const m = months % 12
+  return m ? `${y} 岁 ${m} 个月` : `${y} 岁`
+}
+
 export function nowIso(): string {
   return new Date().toISOString()
 }
@@ -100,14 +115,22 @@ export function sleepMinutesOnDay(
   return spanMinutesOnDay(startAt, endAt, dayKey, 18, now)
 }
 
-/** 外出在某本地日内的分钟数 */
+/** 外出在某本地日内的分钟数（外出不跨天：只算开始那天，且不超过当天 24 点） */
 export function outingMinutesOnDay(
   startAt: string,
   endAt: string | null | undefined,
   dayKey: string,
   now: number = Date.now(),
 ): number {
-  return spanMinutesOnDay(startAt, endAt, dayKey, 18, now)
+  const start = new Date(startAt).getTime()
+  // 只算「开始那天」：其他日子一律 0
+  if (todayKey(new Date(start)) !== dayKey) return 0
+  const end = endAt ? new Date(endAt).getTime() : now
+  // 外出不跨天：截断到当天 24:00
+  const cap = endOfLocalDay(dayKey).getTime()
+  const dayStart = startOfLocalDay(dayKey).getTime()
+  const overlap = Math.min(end, cap) - Math.max(start, dayStart)
+  return Math.max(0, Math.round(overlap / 60000))
 }
 
 export function toLocalInputValue(iso: string): string {

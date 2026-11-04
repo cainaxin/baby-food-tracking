@@ -15,6 +15,13 @@ export interface Baby {
   name: string
   avatarColor: string
   avatarUrl?: string | null
+  /** 生日（YYYY-MM-DD），用于算月龄 */
+  birthDate?: string | null
+  gender?: 'boy' | 'girl' | null
+  /** 最近体重（kg） */
+  weightKg?: number | null
+  /** 最近身高（cm） */
+  heightCm?: number | null
   createdAt: string
 }
 

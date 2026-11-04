@@ -1,8 +1,8 @@
 // 由 scripts/build-info.mjs 在 build/dev 前生成，请勿手改
 export const buildInfo = {
-  "version": "0.3.1",
-  "commit": "a581ba4",
-  "commitTime": "2026-11-04T12:23:19+08:00",
-  "buildTime": "2026-11-04T10:31:08.317Z",
-  "releaseNotes": "## v0.3.1\n\n修复 v0.3.0 所有记录保存报错的问题。\n\n### 修复\n\n- **所有记录保存失败**：v0.3.0 的 `saveEvent` 往**每条记录**的 body 里都带 `photo_url` 字段，但 Supabase 数据库还没执行 `alter table ... add column photo_url`，导致所有类型（吃奶、睡觉等）都被数据库拒绝（`Could not find the 'photo_url' column`）。\n- **原因**：代码假设数据库字段已存在，但实际用户侧的 Supabase 还没跑迁移 SQL；每次保存都触发了这个错误。\n- **实现要点**：\n  - `photo_url` 只在**真有照片**时才写入 body，普通记录不再带这个字段；\n  - 带照片的保存若因缺列报错，自动降级（去 `photo_url` 重试）保住记录本身，toast 提示\"照片没存上\"；\n  - 根治方案仍在 Supabase SQL Editor 执行 `alter table event add column if not exists photo_url text;`（见 `supabase/schema.sql`）。"
+  "version": "0.4.0",
+  "commit": "e6ba8aa",
+  "commitTime": "2026-11-04T18:31:15+08:00",
+  "buildTime": "2026-11-04T15:38:30.580Z",
+  "releaseNotes": "## v0.4.0\n\n外出超时提醒、宝宝个人信息、AI 每日小结。\n\n### 功能\n\n- **外出超时提醒**：外出超过 3 小时（睡觉超过 12 小时）还没填结束时间时，首页顶部出现红色醒目横幅，一键跳去补时间。外出统计改为不跨天（只算开始当天，截断到 24:00）。\n- **宝宝个人信息**：添加/编辑宝宝时可填生日、性别、体重、身高；首页宝宝卡片显示月龄（如「3 个月」）、性别、体重、身高。\n- **AI 每日小结**：首页「每日小结」卡片，点「生成小结」后根据当天记录（奶量、睡眠、外出、尿布、辅食 + 宝宝月龄/体重）给出总结和建议，鼓励做得好的部分。AI 调用 DeepSeek（deepseek-chat，最便宜），key 存在 Supabase Edge Function 服务端环境变量里，前端永远看不到 key；未部署 EF 时降级为本地统计文字。\n- **为什么**：外出/睡觉忘关导致统计不准；只有文字记录看不出宝宝成长情况；老人需要简单易懂的每日建议。\n- **实现要点**：\n  - 外出 `outingMinutesOnDay` 改为只算开始那天并截断到 24:00；\n  - `findStaleSpans` 扫描未关闭的外出/睡觉，超阈值时首页显示 `alert-banner`；\n  - `Baby` 增加 `birthDate/gender/weightKg/heightCm`，`formatMonthAge` 算月龄；数据库列缺失时自动降级不写入；\n  - AI 走 `supabase/functions/daily-summary/`（Deno），前端 `fetchDailySummary` 调用 EF；未部署或失败时用 `fallbackSummary` 本地文案。"
 } as const

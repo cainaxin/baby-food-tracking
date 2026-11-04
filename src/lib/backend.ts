@@ -38,6 +38,10 @@ type BabyRow = {
   name: string
   avatar_color?: string | null
   avatar_url?: string | null
+  birth_date?: string | null
+  gender?: string | null
+  weight_kg?: number | null
+  height_cm?: number | null
   created_at: string
 }
 
@@ -60,6 +64,10 @@ function mapBaby(row: BabyRow): Baby {
     name: row.name,
     avatarColor: row.avatar_color || '#0A84FF',
     avatarUrl: row.avatar_url || null,
+    birthDate: row.birth_date || null,
+    gender: (row.gender as 'boy' | 'girl' | null) ?? null,
+    weightKg: row.weight_kg ?? null,
+    heightCm: row.height_cm ?? null,
     createdAt: row.created_at,
   }
 }
@@ -278,6 +286,10 @@ export async function addBaby(input: {
   name: string
   avatarColor: string
   avatarUrl?: string | null
+  birthDate?: string | null
+  gender?: 'boy' | 'girl' | null
+  weightKg?: number | null
+  heightCm?: number | null
 }): Promise<{ baby?: Baby; error?: string }> {
   if (!supabase) {
     const baby: Baby = {
@@ -285,6 +297,10 @@ export async function addBaby(input: {
       name: input.name,
       avatarColor: input.avatarColor,
       avatarUrl: input.avatarUrl ?? null,
+      birthDate: input.birthDate ?? null,
+      gender: input.gender ?? null,
+      weightKg: input.weightKg ?? null,
+      heightCm: input.heightCm ?? null,
       createdAt: nowIso(),
     }
     await localPatch((s) => ({
@@ -304,15 +320,22 @@ export async function addBaby(input: {
     if (uploaded.url) avatarUrl = uploaded.url
   }
 
+  const row: Record<string, unknown> = {
+    family_id: user.familyId,
+    name: input.name,
+    avatar_color: input.avatarColor,
+    avatar_url: avatarUrl,
+  }
+  // 只有真填了才写入，避免数据库缺列时全挂
+  if (input.birthDate) row.birth_date = input.birthDate
+  if (input.gender) row.gender = input.gender
+  if (input.weightKg != null) row.weight_kg = input.weightKg
+  if (input.heightCm != null) row.height_cm = input.heightCm
+
   const { data, error } = await supabase
     .from('baby')
-    .insert({
-      family_id: user.familyId,
-      name: input.name,
-      avatar_color: input.avatarColor,
-      avatar_url: avatarUrl,
-    })
-    .select('id,name,avatar_color,avatar_url,created_at')
+    .insert(row)
+    .select('*')
     .single()
   if (error) return { error: error.message }
   return { baby: mapBaby(data) }
@@ -320,7 +343,15 @@ export async function addBaby(input: {
 
 export async function updateBaby(
   id: string,
-  input: { name: string; avatarColor: string; avatarUrl?: string | null },
+  input: {
+    name: string
+    avatarColor: string
+    avatarUrl?: string | null
+    birthDate?: string | null
+    gender?: 'boy' | 'girl' | null
+    weightKg?: number | null
+    heightCm?: number | null
+  },
 ): Promise<{ baby?: Baby; error?: string }> {
   if (!supabase) {
     await localPatch((s) => ({
@@ -332,6 +363,10 @@ export async function updateBaby(
               name: input.name,
               avatarColor: input.avatarColor,
               avatarUrl: input.avatarUrl ?? null,
+              birthDate: input.birthDate ?? null,
+              gender: input.gender ?? null,
+              weightKg: input.weightKg ?? null,
+              heightCm: input.heightCm ?? null,
             }
           : b,
       ),
@@ -348,17 +383,23 @@ export async function updateBaby(
     if (uploaded.url) avatarUrl = uploaded.url
   }
 
+  const row: Record<string, unknown> = {
+    name: input.name,
+    avatar_color: input.avatarColor,
+    avatar_url: avatarUrl,
+    updated_at: nowIso(),
+  }
+  if (input.birthDate !== undefined) row.birth_date = input.birthDate
+  if (input.gender !== undefined) row.gender = input.gender
+  if (input.weightKg !== undefined) row.weight_kg = input.weightKg
+  if (input.heightCm !== undefined) row.height_cm = input.heightCm
+
   const { data, error } = await supabase
     .from('baby')
-    .update({
-      name: input.name,
-      avatar_color: input.avatarColor,
-      avatar_url: avatarUrl,
-      updated_at: nowIso(),
-    })
+    .update(row)
     .eq('id', id)
     .eq('family_id', user.familyId)
-    .select('id,name,avatar_color,avatar_url,created_at')
+    .select('*')
     .single()
   if (error) return { error: error.message }
   return { baby: mapBaby(data) }

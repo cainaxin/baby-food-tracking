@@ -25,9 +25,17 @@ create table if not exists baby (
   avatar_color text not null default '#0A84FF',
   avatar_url text,
   birth_date date,
+  gender text,
+  weight_kg numeric,
+  height_cm numeric,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- 宝宝个人信息：给已有库补列
+alter table baby add column if not exists gender text;
+alter table baby add column if not exists weight_kg numeric;
+alter table baby add column if not exists height_cm numeric;
 
 create table if not exists event (
   id uuid primary key default gen_random_uuid(),

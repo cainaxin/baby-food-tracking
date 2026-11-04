@@ -8,6 +8,7 @@ import {
 } from './types'
 import { loadSolidTypes, saveSolidTypes } from './lib/solidTypes'
 import { compressImage } from './lib/photo'
+import { fetchDailySummary, type DailySummary } from './lib/summary'
 import { uid } from './lib/store'
 import {
   addBaby,
@@ -38,6 +39,7 @@ import {
   eventOverlapsDay,
   sleepMinutesOnDay,
   outingMinutesOnDay,
+  formatMonthAge,
 } from './lib/time'
 import { buildInfo } from './generated/buildInfo'
 
@@ -133,6 +135,21 @@ function isOngoingSpan(ev: BabyEvent): boolean {
   return (
     (ev.type === 'sleep' || ev.type === 'outing') && !ev.endAt
   )
+}
+
+/** 找出超时未关闭的外出/睡觉记录，用于醒目提醒 */
+function findStaleSpans(events: BabyEvent[], babyId: string) {
+  const now = Date.now()
+  return events
+    .filter((e) => e.babyId === babyId && isOngoingSpan(e))
+    .map((e) => {
+      const elapsedMin = Math.round((now - new Date(e.startAt).getTime()) / 60000)
+      // 外出超 3 小时、睡觉超 12 小时提醒
+      const threshold = e.type === 'outing' ? 180 : 720
+      return { ...e, elapsedMin, threshold, overdue: elapsedMin >= threshold }
+    })
+    .filter((e) => e.overdue)
+    .sort((a, b) => b.startAt.localeCompare(a.startAt))
 }
 
 function eventOnDay(ev: BabyEvent, dayKey: string): boolean {
@@ -1121,12 +1138,24 @@ function BabySheet({
 }: {
   baby: Baby | null
   onCancel: () => void
-  onSave: (data: { name: string; avatarColor: string; avatarUrl: string | null }) => void
+  onSave: (data: {
+    name: string
+    avatarColor: string
+    avatarUrl: string | null
+    birthDate: string | null
+    gender: 'boy' | 'girl' | null
+    weightKg: number | null
+    heightCm: number | null
+  }) => void
   onDelete?: () => void
 }) {
   const [name, setName] = useState(baby?.name ?? '')
   const [avatarColor, setAvatarColor] = useState(baby?.avatarColor ?? '#0A84FF')
   const [avatarUrl, setAvatarUrl] = useState(baby?.avatarUrl ?? null)
+  const [birthDate, setBirthDate] = useState(baby?.birthDate ?? '')
+  const [gender, setGender] = useState<'boy' | 'girl' | null>(baby?.gender ?? null)
+  const [weightKg, setWeightKg] = useState(baby?.weightKg?.toString() ?? '')
+  const [heightCm, setHeightCm] = useState(baby?.heightCm?.toString() ?? '')
   const colors = ['#0A84FF', '#FF9F0A', '#FF6482', '#5E5CE6', '#30D158', '#BF5AF2']
 
   return (
@@ -1198,13 +1227,82 @@ function BabySheet({
           />
         </div>
 
+        <div className="field">
+          <label>生日（用于算月龄）</label>
+          <input
+            type="date"
+            value={birthDate}
+            onChange={(e) => setBirthDate(e.target.value)}
+          />
+          {birthDate && (
+            <div className="muted small" style={{ marginTop: 6 }}>
+              现在约 {formatMonthAge(birthDate)}
+            </div>
+          )}
+        </div>
+
+        <div className="field">
+          <label>性别</label>
+          <div className="chip-row">
+            {([
+              { v: 'boy' as const, t: '男宝' },
+              { v: 'girl' as const, t: '女宝' },
+            ]).map((o) => (
+              <button
+                key={o.v}
+                type="button"
+                className={`chip${gender === o.v ? ' active' : ''}`}
+                onClick={() => setGender(gender === o.v ? null : o.v)}
+              >
+                {o.t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="field">
+          <label>最近体重（kg，可选）</label>
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min="0"
+            max="50"
+            value={weightKg}
+            onChange={(e) => setWeightKg(e.target.value)}
+            placeholder="例如：8.5"
+          />
+        </div>
+
+        <div className="field">
+          <label>最近身高（cm，可选）</label>
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.1"
+            min="0"
+            max="150"
+            value={heightCm}
+            onChange={(e) => setHeightCm(e.target.value)}
+            placeholder="例如：72"
+          />
+        </div>
+
         <div className="stack" style={{ marginTop: 20 }}>
           <button
             type="button"
             className="btn btn-primary"
             disabled={!name.trim()}
             onClick={() =>
-              onSave({ name: name.trim(), avatarColor, avatarUrl })
+              onSave({
+                name: name.trim(),
+                avatarColor,
+                avatarUrl,
+                birthDate: birthDate || null,
+                gender,
+                weightKg: weightKg ? Number(weightKg) : null,
+                heightCm: heightCm ? Number(heightCm) : null,
+              })
             }
           >
             保存
@@ -1292,6 +1390,81 @@ function JoinSheet({
 }
 
 /** 保存成功后的确认弹窗：展示刚记的内容，可关闭或重新编辑 */
+function DailySummaryCard({
+  baby,
+  events,
+  dayKey,
+}: {
+  baby: Baby
+  events: BabyEvent[]
+  dayKey: string
+}) {
+  const [summary, setSummary] = useState<DailySummary | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const { summary: s } = await fetchDailySummary(baby, events, dayKey)
+      if (s) setSummary(s)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="card" style={{ padding: 16 }}>
+      <div className="row-between">
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 16 }}>每日小结</div>
+          <div className="muted small">根据今天的记录，给你建议</div>
+        </div>
+        {!summary && (
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ minHeight: 44, padding: '0 16px', borderRadius: 12 }}
+            disabled={loading}
+            onClick={load}
+          >
+            {loading ? '分析中…' : '生成小结'}
+          </button>
+        )}
+        {summary && (
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? '收起' : '展开'}
+          </button>
+        )}
+      </div>
+      {summary && expanded && (
+        <div
+          style={{
+            marginTop: 12,
+            paddingTop: 12,
+            borderTop: '1px solid var(--fill)',
+            lineHeight: 1.75,
+            fontSize: 15,
+          }}
+        >
+          {summary.text.split('\n').map((line, i) => (
+            <p key={i} style={{ margin: '4px 0' }}>{line}</p>
+          ))}
+        </div>
+      )}
+      {summary && !expanded && (
+        <div className="muted small" style={{ marginTop: 8 }}>
+          {summary.text.slice(0, 60)}…
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SaveConfirmSheet({
   confirm,
   babyName,
@@ -1672,7 +1845,15 @@ export default function App() {
   }
 
   const handleSaveBaby = async (
-    payload: { name: string; avatarColor: string; avatarUrl: string | null },
+    payload: {
+      name: string
+      avatarColor: string
+      avatarUrl: string | null
+      birthDate: string | null
+      gender: 'boy' | 'girl' | null
+      weightKg: number | null
+      heightCm: number | null
+    },
     babyId?: string,
   ) => {
     const { error } = babyId ? await updateBaby(babyId, payload) : await addBaby(payload)
@@ -1783,14 +1964,58 @@ export default function App() {
                     <Avatar baby={baby} size="lg" />
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 22, fontWeight: 700 }}>{baby.name}</div>
-                      <div className="muted small">点按切换或管理宝宝</div>
+                      <div className="muted small">
+                        {[
+                          formatMonthAge(baby.birthDate),
+                          baby.gender === 'boy' ? '男宝' : baby.gender === 'girl' ? '女宝' : '',
+                          baby.weightKg != null ? `${baby.weightKg}kg` : '',
+                          baby.heightCm != null ? `${baby.heightCm}cm` : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' · ') || '点按切换或管理宝宝'}
+                      </div>
                     </div>
                     <div className="muted">切换 ›</div>
                   </button>
                 </div>
 
+                {(() => {
+                  const stale = findStaleSpans(babyEvents, baby.id)
+                  if (!stale.length) return null
+                  return (
+                    <div className="alert-banner" role="alert">
+                      <div className="alert-icon" aria-hidden>⏰</div>
+                      <div className="alert-body">
+                        {stale.map((e) => (
+                          <div key={e.id} className="alert-line">
+                            <strong>
+                              {EVENT_META[e.type].label}已 {formatDuration(e.startAt)}
+                            </strong>
+                            <span>还没填结束时间，点击去补上</span>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        className="alert-btn"
+                        onClick={() =>
+                          setSheet({ kind: 'event', type: stale[0].type, editId: stale[0].id })
+                        }
+                      >
+                        去补
+                      </button>
+                    </div>
+                  )
+                })()}
+
                 <div className="section-title">今日状态</div>
                 <SummaryTiles events={todayEvents} allEvents={babyEvents} />
+
+                <DailySummaryCard
+                  baby={baby}
+                  events={todayEvents}
+                  dayKey={todayKey()}
+                />
 
                 <div className="section-title">今日时间线</div>
                 {renderTimeline(todayEvents)}
