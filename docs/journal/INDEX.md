@@ -26,6 +26,7 @@
 ## 环境速查
 
 - **OpenWrt 下载 GitHub 资产用镜像**：`https://gh-proxy.com/https://github.com/...`（`mirror.ghproxy.com` / `ghfast.top` 常不可用）
+- **发版走脚本**：`node scripts/release.mjs v0.4.5 "描述"`，别用 PowerShell `Invoke-RestMethod` 发 Release——中文 body 会变 `?`（编码问题）。脚本用 Node `TextEncoder` UTF-8 发请求。
 
 ## 标签约定
 
