@@ -8,7 +8,7 @@ import {
 } from './types'
 import { loadSolidTypes, saveSolidTypes } from './lib/solidTypes'
 import { compressImage } from './lib/photo'
-import { fetchDailySummary, type DailySummary } from './lib/summary'
+import { fetchDailySummary, askDailyQuestion, type DailySummary } from './lib/summary'
 import { saveDailySummary } from './lib/backend'
 import { uid } from './lib/store'
 import {
@@ -1405,6 +1405,17 @@ function DailySummaryCard({
   const [summary, setSummary] = useState<DailySummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [fromCache, setFromCache] = useState(false)
+  const [question, setQuestion] = useState('')
+  const [answer, setAnswer] = useState('')
+  const [asking, setAsking] = useState(false)
+  const [askError, setAskError] = useState('')
+
+  const PRESET_QUESTIONS = [
+    '今天奶量够吗？',
+    '该几点睡觉？',
+    '今天喝水够吗？',
+    '睡眠质量怎么样？',
+  ]
 
   // 切换日期 / 宝宝时自动加载缓存
   useEffect(() => {
@@ -1440,6 +1451,21 @@ function DailySummaryCard({
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const ask = async (q: string) => {
+    const text = q.trim()
+    if (!text || asking) return
+    setAsking(true)
+    setAskError('')
+    setAnswer('')
+    try {
+      const r = await askDailyQuestion(baby, events, dayKey, text)
+      if (r.answer) setAnswer(r.answer)
+      else setAskError(r.error || '暂时答不上来，请稍后再试')
+    } finally {
+      setAsking(false)
     }
   }
 
@@ -1491,6 +1517,64 @@ function DailySummaryCard({
           点「生成小结」，AI 会根据今天的奶量、睡眠等数据给建议
         </div>
       )}
+
+      {/* 问答区 */}
+      <div className="ask-section">
+        <div className="ask-title">💬 问一问</div>
+        <div className="ask-chips">
+          {PRESET_QUESTIONS.map((q) => (
+            <button
+              key={q}
+              type="button"
+              className="chip ask-chip"
+              disabled={asking}
+              onClick={() => ask(q)}
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+        <div className="ask-input-row">
+          <input
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="输入你的问题，例如：今天要喝多少水？"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                ask(question)
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="btn btn-primary ask-send"
+            disabled={asking || !question.trim()}
+            onClick={() => ask(question)}
+          >
+            {asking ? '…' : '问'}
+          </button>
+        </div>
+
+        {asking && (
+          <div className="ask-answer">
+            <div className="muted small">AI 正在思考…</div>
+          </div>
+        )}
+
+        {!asking && askError && (
+          <div className="ask-answer ask-error">{askError}</div>
+        )}
+
+        {!asking && answer && (
+          <div className="ask-answer">
+            <div className="ask-answer-label">AI 回答</div>
+            {answer.split('\n').map((line, i) => (
+              <p key={i} className="summary-line">{line}</p>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

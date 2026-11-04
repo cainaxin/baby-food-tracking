@@ -161,3 +161,53 @@ function fallbackSummary(
   }
   return lines.join('\n')
 }
+
+/** 问答：结合当天数据回答老人的具体问题 */
+export async function askDailyQuestion(
+  baby: Baby,
+  events: BabyEvent[],
+  dayKey: string,
+  question: string,
+): Promise<{ answer?: string; error?: string }> {
+  const q = question.trim()
+  if (!q) return { error: '请输入问题' }
+
+  const context = summarizeDay(baby, events, dayKey)
+  const prompt = [
+    '你是一位温和专业的婴幼儿养育顾问，用中文回答。',
+    '请结合以下宝宝当天的实际数据，回答家长的问题。',
+    '回答要简洁、具体、可执行（100字以内），语气亲切，适合老人阅读。',
+    '',
+    context,
+    '',
+    `家长的问题：${q}`,
+  ].join('\n')
+
+  if (!supabase) {
+    return {
+      answer: `当前是本机模式，无法使用 AI 问答。\n\n今日数据供参考：\n${context}`,
+    }
+  }
+
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/daily-summary`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${supabaseAnonKey}`,
+      },
+      body: JSON.stringify({ prompt }),
+    })
+    if (!res.ok) {
+      return { error: 'AI 服务暂时不可用，请稍后再试' }
+    }
+    const data = await res.json()
+    const answer = data?.text
+    if (!answer || typeof answer !== 'string') {
+      return { error: 'AI 没有返回内容，请再问一次' }
+    }
+    return { answer }
+  } catch {
+    return { error: '网络异常，请稍后再试' }
+  }
+}

@@ -1,8 +1,8 @@
 // 由 scripts/build-info.mjs 在 build/dev 前生成，请勿手改
 export const buildInfo = {
-  "version": "0.4.2",
-  "commit": "31cfcd1",
-  "commitTime": "2026-11-05T00:23:45+08:00",
-  "buildTime": "2026-11-04T16:27:18.716Z",
-  "releaseNotes": "## v0.4.2\n\n修复每日小结没走 AI、只显示本地降级文案的问题。\n\n### 修复\n\n- **小结未调用 AI**：前端用 `supabase.functions.invoke()` 调 Edge Function 失败（静默降级为本地模板文案），改为直接 `fetch` 调用 EF 接口（与验证通过的方式一致），并把错误打进 console 便于排查。\n- **为什么**：`invoke()` 在 HTTP 入口或某些环境下可能失败，而失败被 `catch` 吞掉后用户看到的是本地统计文案，误以为是 AI 生成的。\n- **实现要点**：`summary.ts` 改用 `fetch(`${supabaseUrl}/functions/v1/daily-summary`)`；`supabase.ts` 导出 `supabaseUrl` / `supabaseAnonKey`。"
+  "version": "0.4.3",
+  "commit": "4a1f6fc",
+  "commitTime": "2026-11-05T00:27:26+08:00",
+  "buildTime": "2026-11-04T16:32:27.369Z",
+  "releaseNotes": "## v0.4.3\n\n每日小结增加「问一问」互动问答。\n\n### 功能\n\n- **AI 问答互动**：每日小结卡片底部新增「💬 问一问」区。老人可以点常见问题快捷按钮（今天奶量够吗 / 该几点睡觉 / 今天喝水够吗 / 睡眠质量怎么样），也可以输入自己的问题；AI 会结合当天实际数据（奶量、睡眠、外出等）给出简洁可执行的回答（100 字以内），适合老人阅读。\n- **为什么**：小结是单向展示，老人有具体问题（\"该几点睡\"\"喝多少水\"）时需要有人解答；AI 结合当天数据回答比通用建议更实用。\n- **实现要点**：`askDailyQuestion()` 把当天数据摘要 + 问题一起发给 AI；复用同一个 Edge Function（`daily-summary`），不需要额外部署；问答不缓存（每次回答可能不同）。快捷问题按钮覆盖老人最常见的疑问。"
 } as const
