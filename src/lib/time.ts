@@ -70,23 +70,44 @@ export function eventOverlapsDay(
 }
 
 /**
- * 事件在某本地日内的睡眠分钟数（按重叠区间拆分）。
- * 未填结束时间的睡眠算到「当前时刻」，历史日会自然截断；
- * 同时单次上限 18 小时，避免忘填结束导致历史虚高。
+ * 事件在某本地日内的分钟数（按重叠区间拆分）。
+ * 未填结束时间的区间事件算到「当前时刻」，历史日会自然截断；
+ * 同时单次上限 maxHours 小时，避免忘填结束导致历史虚高。
  */
+export function spanMinutesOnDay(
+  startAt: string,
+  endAt: string | null | undefined,
+  dayKey: string,
+  maxHours = 18,
+  now: number = Date.now(),
+): number {
+  const start = new Date(startAt).getTime()
+  let end = endAt ? new Date(endAt).getTime() : now
+  if (!endAt) end = Math.min(end, start + maxHours * 3600000)
+  const dayStart = startOfLocalDay(dayKey).getTime()
+  const dayEnd = endOfLocalDay(dayKey).getTime()
+  const overlap = Math.min(end, dayEnd) - Math.max(start, dayStart)
+  return Math.max(0, Math.round(overlap / 60000))
+}
+
+/** 睡眠在某本地日内的分钟数 */
 export function sleepMinutesOnDay(
   startAt: string,
   endAt: string | null | undefined,
   dayKey: string,
   now: number = Date.now(),
 ): number {
-  const start = new Date(startAt).getTime()
-  let end = endAt ? new Date(endAt).getTime() : now
-  if (!endAt) end = Math.min(end, start + 18 * 3600000)
-  const dayStart = startOfLocalDay(dayKey).getTime()
-  const dayEnd = endOfLocalDay(dayKey).getTime()
-  const overlap = Math.min(end, dayEnd) - Math.max(start, dayStart)
-  return Math.max(0, Math.round(overlap / 60000))
+  return spanMinutesOnDay(startAt, endAt, dayKey, 18, now)
+}
+
+/** 外出在某本地日内的分钟数 */
+export function outingMinutesOnDay(
+  startAt: string,
+  endAt: string | null | undefined,
+  dayKey: string,
+  now: number = Date.now(),
+): number {
+  return spanMinutesOnDay(startAt, endAt, dayKey, 18, now)
 }
 
 export function toLocalInputValue(iso: string): string {

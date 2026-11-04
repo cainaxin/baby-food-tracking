@@ -1,8 +1,8 @@
 // 由 scripts/build-info.mjs 在 build/dev 前生成，请勿手改
 export const buildInfo = {
-  "version": "0.2.3",
-  "commit": "26be295",
-  "commitTime": "2026-11-02T12:10:28+08:00",
-  "buildTime": "2026-11-02T04:16:57.328Z",
-  "releaseNotes": "## v0.2.3\n\n关于页可查版本号与更新内容；保存成功后可确认或重新编辑。本次同时修正版本号未随功能更新的问题（此前一直停在 v0.2.2）。\n\n### 功能\n\n- **关于页选项卡**：「我的」页面底部的「关于」卡片改为「版本 / 更新内容」两个选项卡。版本标签页展示应用名称、版本号、Commit、提交时间、发布构建时间；更新标签页将 CHANGELOG 内容解析为标题/段落/列表项排版展示（支持 **加粗** 和 `等宽` 内联样式），避免原来一整段纯文本堆在一起太长。\n- **为什么**：关于卡片里版本信息和更新说明全挤在一起，更新内容一大段纯文本可读性很差，老人和家人都看不清改了什么。\n- **实现要点**：复用项目现有 `.segmented` 选项卡组件；新增 `parseReleaseNotes()` 把 markdown 片段解析为 h2/h3/p/li 结构；`renderNoteInline()` 处理 **加粗** 与 `等宽` 内联标记。\n\n- **保存成功确认弹窗**：记一笔 / 编辑保存后，底部弹出「记录成功 / 已保存修改」，展示类型、时间、奶量或备注等刚写入内容；点「知道了」关闭，点「记错了，重新编辑」可回到表单改完再存。\n- **为什么**：原先只有短暂 toast，老人看不清到底记了什么、记错了也没法马上改，只能再翻时间线找。\n- **实现要点**：乐观写入立刻弹窗；云端返回真实 id 后同步回弹窗，保证「重新编辑」能找到那条；写入失败则关掉弹窗并 toast 报错。\n\n### 部署（2026-11-01）\n\n- **家宽入口上线**：前端静态包部署到 OpenWrt（iStoreOS / i5），`http://nxhome.cloud:3006`，国内手机无 VPN 可访问。\n- **后端保持 Supabase**：登录 / 同步 / 实时仍用 `zxlcsmdsgqnsvcqpokdd.supabase.co`；根路径返回 `{\"error\":\"requested path is invalid\"}` 属正常，不代表不可用。\n- **原因**：`*.vercel.app` 在手机流量下打不开（电脑宽带常可打开），Vercel 管理台 `vercel.com` 可登录≠生产站可用。\n- **代码**：业务代码零改动；`npm run build` 后 `dist` 经 GitHub Release `home-dist-v1` 传到 OpenWrt，Docker `nginx:alpine` 托管。\n\n### 事故（2026-11-01）— 必须记住\n\n- **现象**：部署过程中家里网全断（与关闭 TTYD 网页无关，时间巧合）。\n- **根因**：在 **iStoreOS 主路由** 上执行 `docker run -p 3006:80`（Docker 改写 iptables）+ 随后 `/etc/init.d/firewall restart`，与 OpenWrt fw3/fw4 冲突，NAT/转发损坏。\n- **错误决策**：不应在主路由器上用带端口映射的 Docker；更不应在 Docker 后重启防火墙。\n- **恢复**：`docker stop/rm baby-web` → `docker stop docker` → `firewall restart` + `network restart`；无效则断电重启路由器。\n- **后续约束**：主路由上网稳定优先；宝宝站再上线须用「不碰 iptables」方案（见项目 MEMORY.md）。\n\n### 规则\n\n- **AGENTS.md**：修改需 commit + 更新 CHANGELOG（含**为什么改**）；自测通过后 push 远程。\n- **关键环境/事故/决策**必须写入 CHANGELOG 与项目 MEMORY，保证新对话可续做。"
+  "version": "0.2.4",
+  "commit": "08fe63a",
+  "commitTime": "2026-11-02T12:17:07+08:00",
+  "buildTime": "2026-11-04T01:23:55.260Z",
+  "releaseNotes": "## v0.2.4\n\n历史与每日统计里，外出按时长统计，不只看次数。\n\n### 功能\n\n- **外出时长**：每日统计的「外出」卡片改为显示当日外出总时长（跨天外出按重叠区间拆到各日），下方标注次数；变化曲线新增「外出」维度（分钟）；时间线明细里外出记录显示「几点到几点 · 时长」，未结束的显示已外出多久。\n- **为什么**：原先外出只统计次数，家人更关心「今天在外面待了多久」，尤其推车散步、公园遛弯这类记录。\n- **实现要点**：`time.ts` 抽出通用 `spanMinutesOnDay()`（睡眠、外出共用跨日拆分与未填结束时间的截断逻辑），新增 `outingMinutesOnDay()`；趋势图与当日统计复用同一套拆分规则。"
 } as const

@@ -36,6 +36,7 @@ import {
   fromLocalInputValue,
   eventOverlapsDay,
   sleepMinutesOnDay,
+  outingMinutesOnDay,
 } from './lib/time'
 import { buildInfo } from './generated/buildInfo'
 
@@ -157,6 +158,9 @@ function eventSubtitle(ev: BabyEvent): string {
   } else if (ev.type === 'outing' && ev.endAt) {
     parts.push(formatSpan(ev.startAt, ev.endAt))
     if (isCrossDay(ev.startAt, ev.endAt)) parts.push('跨天')
+    parts.push(formatDuration(ev.startAt, ev.endAt))
+  } else if (ev.type === 'outing') {
+    parts.push(`从 ${formatTime(ev.startAt)} 起 · ${formatDuration(ev.startAt)}`)
   }
   if (ev.note) parts.push(ev.note)
   if (ev.createdBy) parts.push(ev.createdBy)
@@ -195,21 +199,26 @@ function dayStats(events: BabyEvent[], dayKey: string) {
   const sleepMin = events
     .filter((e) => e.type === 'sleep')
     .reduce((s, e) => s + sleepMinutes(e, dayKey), 0)
+  const outingMin = events
+    .filter((e) => e.type === 'outing')
+    .reduce((s, e) => s + outingMinutesOnDay(e.startAt, e.endAt, dayKey), 0)
   return {
     milkMl,
     waterMl,
     sleepMin,
+    outingMin,
     diaper: events.filter((e) => e.type === 'diaper').length,
     solid: events.filter((e) => e.type === 'solid').length,
     outing: events.filter((e) => e.type === 'outing').length,
   }
 }
 
-type TrendMetric = 'milk' | 'sleep' | 'diaper' | 'water'
+type TrendMetric = 'milk' | 'sleep' | 'diaper' | 'water' | 'outing'
 
 const TREND_METRICS: { key: TrendMetric; label: string; unit: string }[] = [
   { key: 'milk', label: '奶量', unit: 'ml' },
   { key: 'sleep', label: '睡眠', unit: '分钟' },
+  { key: 'outing', label: '外出', unit: '分钟' },
   { key: 'diaper', label: '换尿布', unit: '次' },
   { key: 'water', label: '喝水', unit: 'ml' },
 ]
@@ -242,7 +251,10 @@ function DayStats({ events, dayKey }: { events: BabyEvent[]; dayKey: string }) {
       </div>
       <div className="summary-tile">
         <div className="label">外出</div>
-        <div className="value">{s.outing} 次</div>
+        <div className="value" style={{ fontSize: 18 }}>
+          {formatMinutes(s.outingMin)}
+        </div>
+        <div className="muted small">共 {s.outing} 次</div>
       </div>
     </div>
   )
@@ -284,6 +296,10 @@ function TrendChart({
       value = events
         .filter((e) => e.type === 'sleep')
         .reduce((s, e) => s + sleepMinutesOnDay(e.startAt, e.endAt, key), 0)
+    } else if (metric === 'outing') {
+      value = dayEvents
+        .filter((e) => e.type === 'outing')
+        .reduce((s, e) => s + outingMinutesOnDay(e.startAt, e.endAt, key), 0)
     } else {
       value = dayEvents.filter((e) => e.type === 'diaper').length
     }
@@ -313,7 +329,7 @@ function TrendChart({
   const barW = Math.max(4, (innerW - gap * (days.length - 1)) / days.length)
 
   const fmt = (v: number) => {
-    if (metric === 'sleep') return formatMinutes(v)
+    if (metric === 'sleep' || metric === 'outing') return formatMinutes(v)
     return `${v} ${meta?.unit ?? ''}`
   }
 
@@ -390,7 +406,9 @@ function TrendChart({
                   fontWeight="600"
                   fill={isPicked ? 'var(--blue)' : 'var(--ink-secondary)'}
                 >
-                  {metric === 'sleep' ? Math.round(d.value) : d.value}
+                  {metric === 'sleep' || metric === 'outing'
+                    ? Math.round(d.value)
+                    : d.value}
                 </text>
               )}
               {showLabel && (
