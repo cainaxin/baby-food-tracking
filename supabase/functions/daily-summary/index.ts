@@ -53,11 +53,17 @@ serve(async (req) => {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        // deepseek-chat 是最便宜的模型
-        model: 'deepseek-chat',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 500,
+        // deepseek-flash 是最便宜的模型，支持 thinking
+        model: 'deepseek-flash',
+        messages: [
+          { role: 'system', content: '你是一位温和专业的婴幼儿养育顾问，用中文回答。' },
+          { role: 'user', content: prompt },
+        ],
+        max_tokens: 2000,
         temperature: 0.7,
+        thinking: { type: 'enabled' },
+        reasoning_effort: 'high',
+        stream: false,
       }),
     })
 
