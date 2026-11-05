@@ -25,7 +25,7 @@ export type DailySummary = {
   }
 }
 
-/** 把一天的记录整理成 AI 能读的文本摘要 */
+/** 把一天的记录整理成 AI 能读的文本摘要（含当前状态） */
 function summarizeDay(baby: Baby, events: BabyEvent[], dayKey: string): string {
   const milk = events.filter((e) => e.type === 'milk')
   const milkMl = milk.reduce((s, e) => s + (e.amountMl ?? 0), 0)
@@ -43,6 +43,19 @@ function summarizeDay(baby: Baby, events: BabyEvent[], dayKey: string): string {
     .filter((e) => e.type === 'solid')
     .map((e) => e.note || '辅食')
 
+  // 当前状态：正在睡觉/外出等（未结束的区间记录）
+  const ongoing = events
+    .filter((e) => (e.type === 'sleep' || e.type === 'outing') && !e.endAt)
+    .sort((a, b) => b.startAt.localeCompare(a.startAt))[0]
+  const statusParts: string[] = []
+  if (ongoing) {
+    const elapsedMin = Math.round((Date.now() - new Date(ongoing.startAt).getTime()) / 60000)
+    const label = ongoing.type === 'sleep' ? '正在睡觉' : '正在外出'
+    statusParts.push(`${label}（已${ongoing.type === 'sleep' ? '睡' : '外出了'} ${fmtMin(elapsedMin)}）`)
+  } else {
+    statusParts.push('醒着、在家')
+  }
+
   const parts: string[] = []
   parts.push(`宝宝：${baby.name}`)
   const age = formatMonthAge(baby.birthDate)
@@ -50,12 +63,13 @@ function summarizeDay(baby: Baby, events: BabyEvent[], dayKey: string): string {
   if (baby.gender) parts.push(`性别：${baby.gender === 'boy' ? '男' : '女'}`)
   if (baby.weightKg != null) parts.push(`体重：${baby.weightKg}kg`)
   if (baby.heightCm != null) parts.push(`身高：${baby.heightCm}cm`)
+  parts.push(`当前状态：${statusParts.join('；')}`)
   parts.push('')
   parts.push(`当日数据：`)
   parts.push(`- 吃奶：${milk.length} 次，共 ${milkMl}ml`)
   parts.push(`- 喝水：${waterMl}ml`)
-  parts.push(`- 睡眠：${fmtMin(sleepMin)}`)
-  parts.push(`- 外出：${fmtMin(outingMin)}`)
+  parts.push(`- 睡眠：${fmtMin(sleepMin)}${ongoing?.type === 'sleep' ? '（含正在睡的这觉）' : ''}`)
+  parts.push(`- 外出：${fmtMin(outingMin)}${ongoing?.type === 'outing' ? '（含正在外的这次）' : ''}`)
   parts.push(`- 换尿布：${diaper} 次`)
   if (solidNotes.length) parts.push(`- 辅食：${solidNotes.join('、')}`)
 
@@ -75,9 +89,11 @@ function buildPrompt(baby: Baby, events: BabyEvent[], dayKey: string): string {
   return [
     '你是一位温和专业的婴幼儿养育顾问，用中文回答。',
     `现在是${dayKey}的${timeSlot}（${String(hour).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}）。`,
-    '请根据以下宝宝当天的记录，给出一段简洁的总结和建议（200字以内）。',
-    '注意结合时间判断：比如清晨数据少是正常的（一天刚开始），不需要建议补奶量。',
-    '格式：先用一两句话总结今天的情况，然后给 1-2 条具体建议（如调整奶量、增加睡眠、适合外出等），做得好的地方要鼓励。语气亲切、适合老人阅读。',
+    '请根据以下宝宝当天的记录和当前状态，给出一段简洁的总结和建议（200字以内）。',
+    '⚠️ 重要：注意看「当前状态」——',
+    '如果宝宝正在睡觉，不要建议"去睡觉""该休息了"；如果正在外出，不要建议"带出去玩"。',
+    '数据少也可能是正常的（清晨刚开始、宝宝在睡觉），不要因为暂时数据少就催促记录。',
+    '格式：先用一两句话总结今天的情况，然后给 1-2 条具体建议（如调整奶量、适合外出等），做得好的地方要鼓励。语气亲切、适合老人阅读。',
     '',
     summarizeDay(baby, events, dayKey),
   ].join('\n')
@@ -201,8 +217,9 @@ export async function askDailyQuestion(
   const prompt = [
     '你是一位温和专业的婴幼儿养育顾问，用中文回答。',
     `提问者是「${asker}」（可能是爸妈或老人），请用亲切自然的语气。`,
-    '请结合以下宝宝当天的实际数据和当前时间，回答问题。',
+    '请结合以下宝宝当天的实际数据、当前状态和时间，回答问题。',
     `重要：现在是「${timeSlot}」（${timeStr}）。`,
+    '⚠️ 注意「当前状态」——宝宝正在睡觉就别建议"去睡"，正在外出就别建议"出去玩"。',
     '根据时间判断数据是否正常——比如凌晨/清晨没有喝奶记录是正常的（一天刚开始）；',
     '也可以根据时间给出建议，比如适合带宝宝外出、该准备睡觉了、该喝奶了等。',
     '回答要简洁、具体、可执行（100字以内），适合老人阅读。',
