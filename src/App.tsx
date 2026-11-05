@@ -44,7 +44,7 @@ import {
 } from './lib/time'
 import { buildInfo } from './generated/buildInfo'
 
-type Tab = 'home' | 'history' | 'settings'
+type Tab = 'home' | 'history' | 'growth' | 'settings'
 /** 记一笔类型选择顺序 */
 const QUICK_TYPES_LIST: EventType[] = [
   'milk', 'solid', 'water', 'diaper',
@@ -1415,6 +1415,96 @@ function JoinSheet({
   )
 }
 
+/** 首页迷你成长卡片：最近身高体重 + 简单折线 */
+function MiniGrowthCard({
+  babyId,
+  onToast,
+}: {
+  babyId: string
+  onToast: (msg: string) => void
+}) {
+  const [records, setRecords] = useState<GrowthRecord[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const r = await getGrowthRecords(babyId)
+        if (!cancelled && r.records) setRecords(r.records)
+      } catch {
+        // ignore
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [babyId])
+
+  const weightData = records.filter((r) => r.weightKg != null).slice(-8)
+  const heightData = records.filter((r) => r.heightCm != null).slice(-8)
+  const latest = records.length ? records[records.length - 1] : null
+
+  if (!records.length) return null
+
+  return (
+    <div
+      className="card"
+      style={{ padding: 14, marginTop: 10, cursor: 'pointer' }}
+      onClick={() => onToast('去「成长」页看完整曲线')}
+    >
+      <div className="row-between" style={{ marginBottom: 8 }}>
+        <div style={{ fontWeight: 700, fontSize: 15 }}>📏 成长</div>
+        {latest && (
+          <div className="muted small">
+            {latest.weightKg != null ? `${latest.weightKg}kg` : ''}
+            {latest.heightCm != null ? ` · ${latest.heightCm}cm` : ''}
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 12 }}>
+        {weightData.length >= 2 && (
+          <div style={{ flex: 1 }}>
+            <div className="muted small" style={{ marginBottom: 2 }}>体重</div>
+            <MiniSparkline data={weightData.map((r) => Number(r.weightKg))} color="#FF9F0A" />
+          </div>
+        )}
+        {heightData.length >= 2 && (
+          <div style={{ flex: 1 }}>
+            <div className="muted small" style={{ marginBottom: 2 }}>身高</div>
+            <MiniSparkline data={heightData.map((r) => Number(r.heightCm))} color="#30D158" />
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** 迷你折线图 */
+function MiniSparkline({ data, color }: { data: number[]; color: string }) {
+  const W = 120
+  const H = 36
+  const max = Math.max(...data)
+  const min = Math.min(...data)
+  const range = max - min || 1
+  const points = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * W
+    const y = H - 4 - ((v - min) / range) * (H - 8)
+    return `${x},${y}`
+  })
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 36 }} aria-hidden>
+      <polyline
+        points={points.join(' ')}
+        fill="none"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
 /** 成长记录卡片：最新身高体重 + 变化曲线 + 记一笔 */
 function GrowthCard({
   babyId,
@@ -2421,6 +2511,8 @@ export default function App() {
                 <div className="section-title">今日状态</div>
                 <SummaryTiles events={todayEvents} allEvents={babyEvents} />
 
+                <MiniGrowthCard babyId={baby.id} onToast={setToast} />
+
                 <div className="section-title">
                   今日时间线
                   <button
@@ -2598,6 +2690,27 @@ export default function App() {
 
             <div className="section-title">{formatDayLabel(historyDay)} · 明细</div>
             {renderTimeline(historyEvents)}
+          </div>
+        </>
+      )}
+
+      {tab === 'growth' && (
+        <>
+          <header className="header">
+            <h1>成长</h1>
+            <p className="muted" style={{ margin: '6px 0 0' }}>
+              记录身高体重，看{baby ? ` ${baby.name}` : '宝宝'}的成长变化
+            </p>
+          </header>
+          <div className="page">
+            {baby ? (
+              <GrowthCard babyId={baby.id} onToast={setToast} />
+            ) : (
+              <div className="card empty">
+                <div className="emoji">📏</div>
+                <div>先添加宝宝</div>
+              </div>
+            )}
           </div>
         </>
       )}
@@ -2872,6 +2985,7 @@ export default function App() {
         )}
         {(
           [
+            { id: 'growth', label: '成长', icon: '📏' },
             { id: 'settings', label: '我的', icon: '👤' },
           ] as const
         ).map((item) => (
@@ -2885,8 +2999,6 @@ export default function App() {
             <span>{item.label}</span>
           </button>
         ))}
-        {/* 占位保持 5 格对称 */}
-        <div />
       </nav>
 
       {toast && (
