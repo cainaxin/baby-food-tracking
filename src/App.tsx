@@ -134,12 +134,14 @@ function isCrossDay(startIso: string, endIso: string): boolean {
   return todayKey(new Date(startIso)) !== todayKey(new Date(endIso))
 }
 
-/** 从 dayKey 算月龄（近似，按自然月） */
-function getMonthAgeFromDayKey(dateKey: string): number {
+/** 从 dayKey 算月龄（距出生），需要传入出生日期 */
+function getMonthAgeFromDate(dateKey: string, birthDate: string | null | undefined): number {
+  if (!birthDate) return 0
   const d = new Date(dateKey)
-  const now = new Date()
-  let months = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth())
-  if (now.getDate() < d.getDate()) months--
+  const b = new Date(birthDate)
+  if (Number.isNaN(d.getTime()) || Number.isNaN(b.getTime())) return 0
+  let months = (d.getFullYear() - b.getFullYear()) * 12 + (d.getMonth() - b.getMonth())
+  if (d.getDate() < b.getDate()) months--
   return Math.max(0, months)
 }
 
@@ -1691,7 +1693,7 @@ function GrowthCard({
               unit={metric === 'weight' ? 'kg' : 'cm'}
               metric={metric}
               gender={baby?.gender ?? null}
-              monthAge={baby?.birthDate ? getMonthAgeFromDayKey(todayKey()) : 12}
+              birthDate={baby?.birthDate ?? null}
             />
           ) : (
             <div className="muted small" style={{ textAlign: 'center', padding: '20px 0' }}>
@@ -1717,183 +1719,157 @@ function GrowthCard({
   )
 }
 
-/** WHO 生长标准曲线：彩色百分位区间 + 宝宝数据叠加 */
+/** WHO 生长标准曲线：干净的大图设计，按出生月龄排列 */
 function GrowthChart({
   data,
   unit,
   metric,
   gender,
-  monthAge,
+  birthDate,
 }: {
   data: { dateKey: string; value: number }[]
   unit: string
   metric: 'weight' | 'height'
   gender: 'boy' | 'girl' | null
-  monthAge: number
+  birthDate: string | null
 }) {
-  const who = getWhoPercentiles(metric, gender, monthAge)
+  // 计算每条数据的月龄（距出生）
+  const points = data
+    .map((d) => ({ ...d, age: getMonthAgeFromDate(d.dateKey, birthDate) }))
+    .sort((a, b) => a.age - b.age)
 
-  // 计算 Y 轴范围：WHO 数据 + 宝宝数据都要显示
-  const allValues = [
-    ...who.map((w) => w.p3),
-    ...who.map((w) => w.p97),
-    ...data.map((d) => d.value),
-  ]
-  const yMin = Math.floor(Math.min(...allValues) * 0.95)
-  const yMax = Math.ceil(Math.max(...allValues) * 1.05)
-  const yRange = yMax - yMin || 1
+  const maxAge = Math.min(24, Math.max(...points.map((p) => p.age), 6) + 3)
+  const who = getWhoPercentiles(metric, gender, maxAge)
+  if (!who.length) return null
 
-  const W = 340
-  const H = 220
-  const padL = 42
-  const padR = 12
-  const padT = 14
-  const padB = 28
-  const innerW = W - padL - padR
-  const innerH = H - padT - padB
+  const allVals = [...who.map((w) => w.p3), ...who.map((w) => w.p97), ...points.map((p) => p.value)]
+  const yMin = Math.floor(Math.min(...allVals) - 1)
+  const yMax = Math.ceil(Math.max(...allVals) + 1)
 
-  // X 轴：月龄 0-24（或到当前月龄）
-  const maxAge = Math.max(24, monthAge + 2)
-  const xScale = (age: number) => padL + (age / maxAge) * innerW
-  const yScale = (val: number) => padT + innerH - ((val - yMin) / yRange) * innerH
+  const W = 360, H = 240, PL = 44, PR = 14, PT = 16, PB = 32
+  const iw = W - PL - PR, ih = H - PT - PB
+  const xS = (a: number) => PL + (a / maxAge) * iw
+  const yS = (v: number) => PT + ih - ((v - yMin) / (yMax - yMin)) * ih
 
-  // 生成百分位路径
-  const percentilePath = (key: 'p3' | 'p15' | 'p50' | 'p85' | 'p97') => {
-    return who
-      .map((w, i) => `${i === 0 ? 'M' : 'L'}${xScale(w.age)},${yScale(w[key])}`)
-      .join(' ')
+  // 路径工具
+  const path = (key: 'p3' | 'p15' | 'p50' | 'p85' | 'p97') =>
+    who.map((w, i) => `${i ? 'L' : 'M'}${xS(w.age)},${yS(w[key])}`).join(' ')
+
+  const band = (top: 'p15' | 'p85', bot: 'p85' | 'p97' | 'p15') => {
+    const up = who.map((w, i) => `${i ? 'L' : 'M'}${xS(w.age)},${yS(w[top])}`)
+    const dn = [...who].reverse().map((w) => `L${xS(w.age)},${yS(w[bot])}`)
+    return [...up, ...dn, 'Z'].join(' ')
   }
 
-  // 彩色区间带
-  const bandArea = (topKey: 'p3' | 'p15' | 'p85', botKey: 'p15' | 'p85' | 'p97') => {
-    const top = who.map((w, i) => `${i === 0 ? 'M' : 'L'}${xScale(w.age)},${yScale(w[topKey])}`)
-    const bot = who.slice().reverse().map((w) => `L${xScale(w.age)},${yScale(w[botKey])}`)
-    return [...top, ...bot, 'Z'].join(' ')
-  }
+  // 宝宝曲线
+  const babyLine = points.map((p, i) => `${i ? 'L' : 'M'}${xS(p.age)},${yS(p.value)}`).join(' ')
 
-  // 宝宝数据点
-  const babyPoints = data.map((d) => {
-    const age = getMonthAgeFromDayKey(d.dateKey)
-    return { ...d, age, x: xScale(Math.min(age, maxAge)), y: yScale(d.value) }
-  })
-  const babyPath = babyPoints.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ')
+  // Y 轴刻度
+  const yTicks: number[] = []
+  const step = metric === 'weight' ? 1 : 5
+  for (let v = Math.ceil(yMin / step) * step; v <= yMax; v += step) yTicks.push(v)
 
-  // 最新值百分位
-  const latestZone = data.length
-    ? getPercentileZone(data[data.length - 1].value, monthAge, metric, gender)
-    : null
+  // X 轴刻度
+  const xTicks: number[] = []
+  for (let a = 0; a <= maxAge; a += 3) xTicks.push(a)
 
   return (
     <div>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        style={{ width: '100%', marginTop: 10 }}
-        role="img"
-        aria-label={`WHO ${metric === 'weight' ? '体重' : '身高'}生长标准曲线`}
-      >
-        {/* 背景：正常区间（绿） */}
-        <path d={bandArea('p15', 'p85')} fill="#d4edda" opacity="0.7" />
-        {/* 背景：偏离区间（橙）上 */}
-        <path d={bandArea('p3', 'p15')} fill="#fff3cd" opacity="0.7" />
-        {/* 背景：偏离区间（橙）下 */}
-        <path d={bandArea('p85', 'p97')} fill="#fff3cd" opacity="0.7" />
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', marginTop: 10 }}>
+        {/* 彩色区间带 */}
+        <path d={band('p15', 'p97')} fill="#fff3cd" opacity="0.5" />
+        <path d={band('p15', 'p85')} fill="#d4edda" opacity="0.6" />
 
         {/* 参考线 */}
-        <path d={percentilePath('p50')} fill="none" stroke="#28a745" strokeWidth="1.5" strokeDasharray="6 3" />
-        <path d={percentilePath('p3')} fill="none" stroke="#dc3545" strokeWidth="1" strokeDasharray="4 3" />
-        <path d={percentilePath('p97')} fill="none" stroke="#dc3545" strokeWidth="1" strokeDasharray="4 3" />
+        <path d={path('p50')} fill="none" stroke="#28a745" strokeWidth="1.5" strokeDasharray="6 3" />
+        <path d={path('p3')} fill="none" stroke="#dc3545" strokeWidth="1" strokeDasharray="4 3" />
+        <path d={path('p97')} fill="none" stroke="#dc3545" strokeWidth="1" strokeDasharray="4 3" />
 
-        {/* 百分位标注 */}
-        {who.length > 0 && (
-          <>
-            <text x={padL + 2} y={yScale(who[0].p50) - 4} fontSize="9" fill="#28a745" fontWeight="600">P50</text>
-            <text x={padL + 2} y={yScale(who[0].p3) - 4} fontSize="9" fill="#dc3545" fontWeight="600">P3</text>
-            <text x={padL + 2} y={yScale(who[0].p97) + 12} fontSize="9" fill="#dc3545" fontWeight="600">P97</text>
-          </>
-        )}
+        {/* P3 / P50 / P97 标注（右侧） */}
+        {who.length > 0 && (() => {
+          const last = who[who.length - 1]
+          return (
+            <>
+              <text x={xS(last.age) - 4} y={yS(last.p3) + 12} textAnchor="end" fontSize="10" fill="#dc3545" fontWeight="600">P3</text>
+              <text x={xS(last.age) - 4} y={yS(last.p50) - 4} textAnchor="end" fontSize="10" fill="#28a745" fontWeight="600">P50</text>
+              <text x={xS(last.age) - 4} y={yS(last.p97) + 12} textAnchor="end" fontSize="10" fill="#dc3545" fontWeight="600">P97</text>
+            </>
+          )
+        })()}
 
         {/* 宝宝曲线 */}
-        {babyPoints.length >= 2 && (
-          <path d={babyPath} fill="none" stroke="var(--blue)" strokeWidth="2.5" strokeLinejoin="round" />
+        {points.length >= 2 && (
+          <path d={babyLine} fill="none" stroke="var(--blue)" strokeWidth="2.5" strokeLinejoin="round" />
         )}
-        {babyPoints.map((p) => {
+        {points.map((p) => {
           const z = getPercentileZone(p.value, p.age, metric, gender)
-          const color = z.zone === 'low' || z.zone === 'high' ? '#dc3545' : z.zone === 'normal' ? 'var(--blue)' : '#ffc107'
+          const c = z.zone === 'normal' ? '#0a84ff' : '#dc3545'
           return (
             <g key={p.dateKey}>
-              <circle cx={p.x} cy={p.y} r="5" fill={color} stroke="#fff" strokeWidth="1.5" />
-              <text
-                x={p.x}
-                y={p.y - 10}
-                textAnchor="middle"
-                fontSize="10"
-                fontWeight="600"
-                fill={color}
-              >
+              <circle cx={xS(p.age)} cy={yS(p.value)} r="5" fill={c} stroke="#fff" strokeWidth="2" />
+              <text x={xS(p.age)} y={yS(p.value) - 10} textAnchor="middle" fontSize="11" fontWeight="700" fill={c}>
                 {p.value}
               </text>
             </g>
           )
         })}
 
-        {/* X 轴 */}
-        <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH} stroke="var(--separator)" />
-        {[0, 3, 6, 9, 12, 18, 24].filter((a) => a <= maxAge).map((age) => (
-          <text
-            key={age}
-            x={xScale(age)}
-            y={H - 8}
-            textAnchor="middle"
-            fontSize="10"
-            fill="var(--ink-tertiary)"
-          >
-            {age}月
-          </text>
+        {/* 坐标轴 */}
+        <line x1={PL} y1={PT + ih} x2={W - PR} y2={PT + ih} stroke="var(--separator)" />
+        <line x1={PL} y1={PT} x2={PL} y2={PT + ih} stroke="var(--separator)" />
+
+        {/* X 轴刻度 */}
+        {xTicks.map((a) => (
+          <g key={a}>
+            <line x1={xS(a)} y1={PT + ih} x2={xS(a)} y2={PT + ih + 4} stroke="var(--separator)" />
+            <text x={xS(a)} y={H - 10} textAnchor="middle" fontSize="11" fill="var(--ink-tertiary)">{a}月</text>
+          </g>
         ))}
 
-        {/* Y 轴 */}
-        {[yMin, (yMin + yMax) / 2, yMax].map((v) => (
-          <text key={v} x={4} y={yScale(v) + 3} fontSize="9" fill="var(--ink-tertiary)">
-            {v.toFixed(metric === 'weight' ? 1 : 0)}
-          </text>
+        {/* Y 轴刻度 */}
+        {yTicks.map((v) => (
+          <g key={v}>
+            <line x1={PL - 4} y1={yS(v)} x2={W - PR} y2={yS(v)} stroke="var(--separator)" strokeDasharray="2 3" />
+            <text x={PL - 6} y={yS(v) + 4} textAnchor="end" fontSize="11" fill="var(--ink-tertiary)">
+              {metric === 'weight' ? v.toFixed(1) : v}
+            </text>
+          </g>
         ))}
       </svg>
 
       {/* 图例 */}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 8, fontSize: 11, color: 'var(--ink-tertiary)' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 3, background: '#d4edda', border: '1px solid #28a745' }} />
-          正常范围（P15-85）
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 8, fontSize: 12, color: 'var(--ink-secondary)', alignItems: 'center' }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 14, height: 10, borderRadius: 2, background: '#d4edda', border: '1px solid #28a745' }} />
+          正常（P15~85）
         </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 12, height: 12, borderRadius: 3, background: '#fff3cd', border: '1px solid #ffc107' }} />
-          偏离范围
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 14, height: 10, borderRadius: 2, background: '#fff3cd', border: '1px solid #ffc107' }} />
+          偏离（P3~15 / P85~97）
         </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--blue)' }} />
-          宝宝数据
+        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <span style={{ width: 14, height: 0, borderTop: '2px dashed #28a745' }} />
+          P50 中位线
         </span>
       </div>
 
-      {latestZone && (
-        <div
-          className="summary-card"
-          style={{
-            marginTop: 10,
-            padding: '10px 14px',
-            borderRadius: 12,
-            background: latestZone.zone === 'normal' ? '#d4edda' : '#fff3cd',
-            border: `1px solid ${latestZone.zone === 'normal' ? '#28a745' : '#ffc107'}`,
-          }}
-        >
-          <span style={{ fontWeight: 700, fontSize: 15 }}>
-            最新{metric === 'weight' ? '体重' : '身高'}：{data[data.length - 1].value}{unit}
-          </span>
-          <span style={{ marginLeft: 8, fontSize: 13, color: 'var(--ink-secondary)' }}>
-            {latestZone.label}（参考 WHO 标准）
-          </span>
-        </div>
-      )}
+      {points.length > 0 && (() => {
+        const last = points[points.length - 1]
+        const z = getPercentileZone(last.value, last.age, metric, gender)
+        return (
+          <div style={{
+            marginTop: 10, padding: '12px 16px', borderRadius: 12,
+            background: z.zone === 'normal' ? '#d4edda' : '#fff3cd',
+            border: `1.5px solid ${z.zone === 'normal' ? '#28a745' : '#ffc107'}`,
+            fontSize: 15,
+          }}>
+            <strong>最新 {last.value}{unit}</strong>
+            <span style={{ marginLeft: 8, color: 'var(--ink-secondary)' }}>
+              · {last.age} 月龄 · {z.label}
+            </span>
+          </div>
+        )
+      })()}
     </div>
   )
 }
