@@ -1662,6 +1662,7 @@ function DailySummaryCard({
   const [summary, setSummary] = useState<DailySummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [fromCache, setFromCache] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
   const [asking, setAsking] = useState(false)
@@ -1705,6 +1706,7 @@ function DailySummaryCard({
       if (s) {
         setSummary(s)
         setFromCache(false)
+        setExpanded(true)
       }
     } finally {
       setLoading(false)
@@ -1748,12 +1750,11 @@ function DailySummaryCard({
         </button>
       </div>
 
-      {summary && (
+      {summary && expanded && (
         <div className="summary-content">
           {summary.text.split('\n').map((line, i) => {
             const trimmed = line.trim()
             if (!trimmed) return <div key={i} className="summary-gap" />
-            // 以「-」或「•」开头的行渲染为列表项
             if (/^[-•·]\s*/.test(trimmed)) {
               return (
                 <div key={i} className="summary-bullet">
@@ -1762,11 +1763,18 @@ function DailySummaryCard({
                 </div>
               )
             }
-            return (
-              <p key={i} className="summary-line">{trimmed}</p>
-            )
+            return <p key={i} className="summary-line">{trimmed}</p>
           })}
         </div>
+      )}
+      {summary && !expanded && (
+        <button
+          type="button"
+          className="summary-preview"
+          onClick={() => setExpanded(true)}
+        >
+          {summary.text.replace(/\n/g, ' ').slice(0, 50)}… <span style={{ color: 'var(--blue)' }}>展开</span>
+        </button>
       )}
 
       {!summary && !loading && (
@@ -2391,28 +2399,28 @@ export default function App() {
                   askerName={data.displayName}
                 />
 
-                <div className="section-title">今日时间线</div>
-                {renderTimeline(todayEvents)}
-
-                <div className="section-title">快捷记一笔</div>
-                <div className="quick-grid">
-                  {QUICK_TYPES.map((t) => {
-                    const meta = EVENT_META[t]
-                    return (
-                      <button
-                        key={t}
-                        type="button"
-                        className="quick-btn"
-                        onClick={() => setSheet({ kind: 'event', type: t })}
-                      >
-                        <div className="quick-icon" style={{ background: `${meta.color}22` }}>
-                          {meta.icon}
-                        </div>
-                        <div className="quick-label">{meta.label}</div>
-                      </button>
-                    )
-                  })}
+                <div className="section-title">
+                  今日时间线
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    style={{ fontSize: 13, marginLeft: 8 }}
+                    onClick={() => setTab('history')}
+                  >
+                    查看全部 ›
+                  </button>
                 </div>
+                {renderTimeline(todayEvents.slice(0, 5))}
+                {todayEvents.length > 5 && (
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    style={{ width: '100%', textAlign: 'center', padding: '10px 0', color: 'var(--blue)', fontWeight: 600 }}
+                    onClick={() => setTab('history')}
+                  >
+                    还有 {todayEvents.length - 5} 条，去历史页看
+                  </button>
+                )}
               </>
             ) : (
               <div className="card empty">
@@ -2431,6 +2439,28 @@ export default function App() {
               </div>
             )}
           </div>
+
+          {/* 底部固定快捷记录栏 */}
+          {baby && (
+            <div className="quick-bar">
+              {QUICK_TYPES.map((t) => {
+                const meta = EVENT_META[t]
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    className="quick-bar-btn"
+                    onClick={() => setSheet({ kind: 'event', type: t })}
+                  >
+                    <span className="quick-bar-icon" style={{ background: `${meta.color}22` }}>
+                      {meta.icon}
+                    </span>
+                    <span className="quick-bar-label">{meta.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </>
       )}
 

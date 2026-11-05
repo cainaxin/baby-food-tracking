@@ -1,8 +1,8 @@
 // 由 scripts/build-info.mjs 在 build/dev 前生成，请勿手改
 export const buildInfo = {
-  "version": "0.4.8",
-  "commit": "e0bd00a",
-  "commitTime": "2026-11-05T11:22:58+08:00",
-  "buildTime": "2026-11-05T03:33:23.737Z",
-  "releaseNotes": "## v0.4.8\n\n新增成长记录：身高体重按日期记录，拉曲线看变化。\n\n### 功能\n\n- **成长记录**：历史页新增「📏 成长记录」卡片，可按日期记录身高（cm）和体重（kg）；显示最近一次数据、变化曲线（SVG 折线图，体重/身高可切换）、最近 5 条记录列表。同一天重复记录自动覆盖。\n- **为什么**：身高体重不是固定值，只在宝宝资料里存一个\"最近值\"看不到成长趋势；按日期记录 + 曲线图才能看出宝宝长得好不好。\n- **实现要点**：\n  - 新增 `growth` 表（`baby_id + day_key` 唯一，upsert 覆盖）；数据库缺列时降级保存并提示。\n  - 本地模式存 localStorage（`baby-tracker-growth`）。\n  - `GrowthChart` 用 SVG 画折线图，标注数据点数值和日期。\n  - 数据不足 2 条时提示\"再记录一次就能看到变化曲线\"。\n\n### 需要执行的 SQL（Supabase SQL Editor）\n\n```sql\ncreate table if not exists growth (\n  id uuid primary key default gen_random_uuid(),\n  family_id uuid not null references family(id) on delete cascade,\n  baby_id uuid not null references baby(id) on delete cascade,\n  day_key text not null,\n  weight_kg numeric,\n  height_cm numeric,\n  note text,\n  created_by text,\n  created_at timestamptz not null default now(),\n  unique (baby_id, day_key)\n);\nalter table growth enable row level security;\ncreate policy growth_select on growth for select using (is_family_member(family_id));\ncreate policy growth_write on growth for all using (is_family_member(family_id)) with check (is_family_member(family_id));\n```"
+  "version": "0.5.0",
+  "commit": "8feba42",
+  "commitTime": "2026-11-05T11:33:34+08:00",
+  "buildTime": "2026-11-05T04:07:13.342Z",
+  "releaseNotes": "## v0.5.0\n\n首页布局大优化：记录更快、一屏看全。\n\n### 优化\n\n- **快捷记一笔固定底部**：8 个记录按钮（吃奶/辅食/喝水/换尿布/睡觉/起床/外出/洗澡游泳）固定在页面底部导航栏上方，永远可见、一键记录，不用滚动到页面最下方找。\n- **时间线只显示最近 5 条**：首页不再堆全部记录，最近 5 条 + 「还有 N 条，去历史页看」按钮跳转历史。\n- **每日小结默认折叠**：只占一行预览文字，点「展开」看完整内容，首页更清爽。\n- **为什么**：首页内容太多，记录按钮在最下面要翻很久才能记一笔，老人操作不方便。\n- **实现要点**：`quick-bar` 固定在 bottom nav 上方（毛玻璃背景 + 横向滚动）；时间线 `.slice(0, 5)`；小结卡片加 `expanded` 状态控制。"
 } as const

@@ -102,6 +102,11 @@ textarea:focus {
   padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 24px);
 }
 
+/* 首页底部给快捷栏留空间 */
+.app-shell:has(.quick-bar) {
+  padding-bottom: calc(var(--nav-height) + var(--safe-bottom) + 76px);
+}
+
 .page {
   padding: 12px 16px 24px;
   overflow-x: hidden;
@@ -835,6 +840,21 @@ textarea:focus {
   text-align: center;
 }
 
+.summary-preview {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: none;
+  background: var(--fill);
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-secondary);
+  cursor: pointer;
+}
+
 .ask-section {
   margin-top: 14px;
   padding-top: 12px;
@@ -972,6 +992,63 @@ textarea:focus {
   justify-content: space-between;
   padding: 5px 0;
   font-size: 14px;
+}
+
+/* 底部固定快捷记录栏 */
+.quick-bar {
+  position: fixed;
+  bottom: calc(var(--nav-height) + var(--safe-bottom));
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  gap: 2px;
+  padding: 8px 8px 6px;
+  background: rgba(255, 255, 255, 0.92);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border-top: 0.5px solid var(--separator);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.quick-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.quick-bar-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 0 2px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 10px;
+}
+
+.quick-bar-btn:active {
+  background: var(--fill);
+}
+
+.quick-bar-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.quick-bar-label {
+  font-size: 10px;
+  color: var(--ink-secondary);
+  white-space: nowrap;
 }
 
 .danger-text {
