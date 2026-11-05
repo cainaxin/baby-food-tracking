@@ -1553,6 +1553,7 @@ function GrowthCard({
   const [metric, setMetric] = useState<'weight' | 'height'>('weight')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [showAll, setShowAll] = useState(false)
+  const [zoomRange, setZoomRange] = useState<'all' | '6m' | '3m'>('all')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1733,6 +1734,25 @@ function GrowthCard({
               </button>
             ))}
           </div>
+          {/* 缩放控制 */}
+          <div className="segmented" style={{ marginTop: 10 }} role="tablist" aria-label="缩放">
+            {([
+              { v: 'all' as const, t: '全部' },
+              { v: '6m' as const, t: '近 6 月' },
+              { v: '3m' as const, t: '近 3 月' },
+            ]).map((o) => (
+              <button
+                key={o.v}
+                type="button"
+                role="tab"
+                aria-selected={zoomRange === o.v}
+                className={`segmented-item${zoomRange === o.v ? ' active' : ''}`}
+                onClick={() => setZoomRange(o.v)}
+              >
+                {o.t}
+              </button>
+            ))}
+          </div>
           {chartData.length >= 2 ? (
             <GrowthChart
               data={chartData}
@@ -1740,6 +1760,7 @@ function GrowthCard({
               metric={metric}
               gender={baby?.gender ?? null}
               birthDate={baby?.birthDate ?? null}
+              zoomRange={zoomRange}
             />
           ) : (
             <div className="muted small" style={{ textAlign: 'center', padding: '20px 0' }}>
@@ -1800,20 +1821,32 @@ function GrowthChart({
   metric,
   gender,
   birthDate,
+  zoomRange = 'all',
 }: {
   data: { dateKey: string; value: number }[]
   unit: string
   metric: 'weight' | 'height'
   gender: 'boy' | 'girl' | null
   birthDate: string | null
+  zoomRange?: 'all' | '6m' | '3m'
 }) {
   // 计算每条数据的月龄（距出生）
-  const points = data
+  const allPoints = data
     .map((d) => ({ ...d, age: getMonthAgeFromDate(d.dateKey, birthDate) }))
     .sort((a, b) => a.age - b.age)
 
-  const maxAge = Math.min(24, Math.max(...points.map((p) => p.age), 6) + 3)
-  const who = getWhoPercentiles(metric, gender, maxAge)
+  // 今日月龄
+  const todayAge = getMonthAgeFromDate(todayKey(), birthDate)
+
+  // 缩放：只显示最近 N 个月的数据
+  const minAge = zoomRange === '3m' ? todayAge - 3 : zoomRange === '6m' ? todayAge - 6 : 0
+  const points = allPoints.filter((p) => p.age >= minAge)
+
+  const maxAge = zoomRange === 'all'
+    ? Math.min(24, Math.max(...allPoints.map((p) => p.age), todayAge, 6) + 2)
+    : Math.max(todayAge + 1, Math.max(...points.map((p) => p.age), minAge) + 1)
+  const xMin = zoomRange === 'all' ? 0 : minAge
+  const who = getWhoPercentiles(metric, gender, maxAge).filter((w) => w.age >= xMin - 1)
   if (!who.length) return null
 
   const allVals = [...who.map((w) => w.p3), ...who.map((w) => w.p97), ...points.map((p) => p.value)]
@@ -1822,7 +1855,7 @@ function GrowthChart({
 
   const W = 360, H = 240, PL = 44, PR = 14, PT = 16, PB = 32
   const iw = W - PL - PR, ih = H - PT - PB
-  const xS = (a: number) => PL + (a / maxAge) * iw
+  const xS = (a: number) => PL + ((a - xMin) / (maxAge - xMin)) * iw
   const yS = (v: number) => PT + ih - ((v - yMin) / (yMax - yMin)) * ih
 
   // 路径工具
@@ -1845,7 +1878,8 @@ function GrowthChart({
 
   // X 轴刻度
   const xTicks: number[] = []
-  for (let a = 0; a <= maxAge; a += 3) xTicks.push(a)
+  const stepX = zoomRange === 'all' ? 3 : 1
+  for (let a = Math.ceil(xMin / stepX) * stepX; a <= maxAge; a += stepX) xTicks.push(a)
 
   return (
     <div>
@@ -1870,6 +1904,23 @@ function GrowthChart({
             </>
           )
         })()}
+
+        {/* 今日虚线 */}
+        {todayAge >= xMin && todayAge <= maxAge && (
+          <g>
+            <line
+              x1={xS(todayAge)} y1={PT}
+              x2={xS(todayAge)} y2={PT + ih}
+              stroke="#ff9f0a" strokeWidth="1.5" strokeDasharray="6 3"
+            />
+            <text
+              x={xS(todayAge)} y={PT - 2}
+              textAnchor="middle" fontSize="10" fontWeight="700" fill="#ff9f0a"
+            >
+              今天
+            </text>
+          </g>
+        )}
 
         {/* 宝宝曲线 */}
         {points.length >= 2 && (
@@ -1930,6 +1981,7 @@ function GrowthChart({
       {points.length > 0 && (() => {
         const last = points[points.length - 1]
         const z = getPercentileZone(last.value, last.age, metric, gender)
+        const nowAge = getMonthAgeFromDate(todayKey(), birthDate)
         return (
           <div style={{
             marginTop: 10, padding: '12px 16px', borderRadius: 12,
@@ -1939,8 +1991,13 @@ function GrowthChart({
           }}>
             <strong>最新 {last.value}{unit}</strong>
             <span style={{ marginLeft: 8, color: 'var(--ink-secondary)' }}>
-              · {last.age} 月龄 · {z.label}
+              · {nowAge} 月龄 · {z.label}
             </span>
+            {last.age !== nowAge && (
+              <div style={{ fontSize: 12, color: 'var(--ink-tertiary)', marginTop: 4 }}>
+                （该数据记录于 {last.dateKey.slice(5)}，当时 {last.age} 月龄）
+              </div>
+            )}
           </div>
         )
       })()}
