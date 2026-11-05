@@ -4,7 +4,6 @@ import {
   DIAPER_TAGS,
   EVENT_META,
   MILK_KINDS,
-  QUICK_TYPES,
 } from './types'
 import { loadSolidTypes, saveSolidTypes } from './lib/solidTypes'
 import { compressImage } from './lib/photo'
@@ -756,6 +755,7 @@ function EventSheet({
   const [photoUrl, setPhotoUrl] = useState<string | null>(edit?.photoUrl ?? null)
   const [photoLoading, setPhotoLoading] = useState(false)
   const [photoError, setPhotoError] = useState('')
+  const [showTimeFields, setShowTimeFields] = useState(false)
 
   const bathPresets = [
     { label: '洗澡', value: '洗澡' },
@@ -804,16 +804,33 @@ function EventSheet({
           </button>
         </div>
 
-        <div className="field">
-          <label>时间</label>
-          <input
-            type="datetime-local"
-            value={startAt}
-            onChange={(e) => setStartAt(e.target.value)}
-          />
-        </div>
+        {/* 时间默认现在，改时间才展开 */}
+        {!edit && !showTimeFields ? (
+          <div className="field">
+            <div className="row-between">
+              <span className="muted small">时间：现在（{formatTime(fromLocalInputValue(startAt))}）</span>
+              <button
+                type="button"
+                className="btn-ghost"
+                style={{ fontSize: 14, color: 'var(--blue)' }}
+                onClick={() => setShowTimeFields(true)}
+              >
+                改时间 ›
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="field">
+            <label>时间</label>
+            <input
+              type="datetime-local"
+              value={startAt}
+              onChange={(e) => setStartAt(e.target.value)}
+            />
+          </div>
+        )}
 
-        {(type === 'sleep' || type === 'outing' || type === 'milk') && (
+        {(edit || showTimeFields) && (type === 'sleep' || type === 'outing' || type === 'milk') && (
           <div className="field">
             <label>
               {type === 'sleep'
@@ -1959,6 +1976,8 @@ export default function App() {
   const [savedConfirm, setSavedConfirm] = useState<SavedConfirm | null>(null)
   /** 「关于」卡片选项卡：版本信息 / 更新内容 */
   const [aboutTab, setAboutTab] = useState<'version' | 'notes'>('version')
+  /** 底部快捷栏「更多」展开态 */
+  const [showMoreQuick, setShowMoreQuick] = useState(false)
   // 云端写入中的本地记录，刷新时保留，避免被慢同步冲掉
   const pendingEventsRef = useRef<Map<string, BabyEvent>>(new Map())
   const pendingDeletesRef = useRef<Set<string>>(new Set())
@@ -2364,27 +2383,31 @@ export default function App() {
                   const stale = findStaleSpans(babyEvents, baby.id)
                   if (!stale.length) return null
                   return (
-                    <div className="alert-banner" role="alert">
-                      <div className="alert-icon" aria-hidden>⏰</div>
-                      <div className="alert-body">
-                        {stale.map((e) => (
-                          <div key={e.id} className="alert-line">
-                            <strong>
-                              {EVENT_META[e.type].label}已 {formatDuration(e.startAt)}
-                            </strong>
-                            <span>还没填结束时间，点击去补上</span>
+                    <div className="alert-banner-big" role="alert">
+                      {stale.map((e) => (
+                        <div key={e.id} className="alert-big-line">
+                          <div className="alert-big-icon" aria-hidden>
+                            {EVENT_META[e.type].icon}
                           </div>
-                        ))}
-                      </div>
-                      <button
-                        type="button"
-                        className="alert-btn"
-                        onClick={() =>
-                          setSheet({ kind: 'event', type: stale[0].type, editId: stale[0].id })
-                        }
-                      >
-                        去补
-                      </button>
+                          <div className="alert-big-text">
+                            <div className="alert-big-title">
+                              {EVENT_META[e.type].label}还没结束
+                            </div>
+                            <div className="alert-big-sub">
+                              已经 {formatDuration(e.startAt)} 了，记得补记结束时间
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className="alert-big-btn"
+                            onClick={() =>
+                              setSheet({ kind: 'event', type: e.type, editId: e.id })
+                            }
+                          >
+                            去补记
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )
                 })()}
@@ -2392,33 +2415,26 @@ export default function App() {
                 <div className="section-title">今日状态</div>
                 <SummaryTiles events={todayEvents} allEvents={babyEvents} />
 
-                <DailySummaryCard
-                  baby={baby}
-                  events={todayEvents}
-                  dayKey={todayKey()}
-                  askerName={data.displayName}
-                />
-
                 <div className="section-title">
                   今日时间线
                   <button
                     type="button"
                     className="btn-ghost"
-                    style={{ fontSize: 13, marginLeft: 8 }}
+                    style={{ fontSize: 14, marginLeft: 8 }}
                     onClick={() => setTab('history')}
                   >
                     查看全部 ›
                   </button>
                 </div>
-                {renderTimeline(todayEvents.slice(0, 5))}
-                {todayEvents.length > 5 && (
+                {renderTimeline(todayEvents.slice(0, 3))}
+                {todayEvents.length > 3 && (
                   <button
                     type="button"
                     className="btn-ghost"
-                    style={{ width: '100%', textAlign: 'center', padding: '10px 0', color: 'var(--blue)', fontWeight: 600 }}
+                    style={{ width: '100%', textAlign: 'center', padding: '12px 0', color: 'var(--blue)', fontWeight: 600, fontSize: 15 }}
                     onClick={() => setTab('history')}
                   >
-                    还有 {todayEvents.length - 5} 条，去历史页看
+                    还有 {todayEvents.length - 3} 条，去历史页看 ›
                   </button>
                 )}
               </>
@@ -2440,17 +2456,23 @@ export default function App() {
             )}
           </div>
 
-          {/* 底部固定快捷记录栏 */}
+          {/* 底部固定快捷记录栏：4 个常用 + 更多 */}
           {baby && (
             <div className="quick-bar">
-              {QUICK_TYPES.map((t) => {
+              {(showMoreQuick
+                ? (['water', 'solid', 'outing', 'bath_swim'] as const)
+                : (['milk', 'sleep', 'wake', 'diaper'] as const)
+              ).map((t) => {
                 const meta = EVENT_META[t]
                 return (
                   <button
                     key={t}
                     type="button"
                     className="quick-bar-btn"
-                    onClick={() => setSheet({ kind: 'event', type: t })}
+                    onClick={() => {
+                      setSheet({ kind: 'event', type: t })
+                      setShowMoreQuick(false)
+                    }}
                   >
                     <span className="quick-bar-icon" style={{ background: `${meta.color}22` }}>
                       {meta.icon}
@@ -2459,6 +2481,16 @@ export default function App() {
                   </button>
                 )
               })}
+              <button
+                type="button"
+                className="quick-bar-btn"
+                onClick={() => setShowMoreQuick((v) => !v)}
+              >
+                <span className="quick-bar-icon" style={{ background: '#8e8e9322' }}>
+                  {showMoreQuick ? '↩' : '⋯'}
+                </span>
+                <span className="quick-bar-label">{showMoreQuick ? '返回' : '更多'}</span>
+              </button>
             </div>
           )}
         </>
