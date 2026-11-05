@@ -43,6 +43,21 @@ export interface FamilyProfile {
   displayName: string
 }
 
+/** 成长记录：按日期记录身高体重 */
+export interface GrowthRecord {
+  id: string
+  babyId: string
+  /** 记录日期 YYYY-MM-DD */
+  dateKey: string
+  /** 体重（kg） */
+  weightKg?: number | null
+  /** 身高（cm） */
+  heightCm?: number | null
+  note?: string | null
+  createdBy: string
+  createdAt: string
+}
+
 export const EVENT_META: Record<
   EventType,
   { label: string; short: string; color: string; icon: string }

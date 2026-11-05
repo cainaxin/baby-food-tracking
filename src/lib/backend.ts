@@ -1,4 +1,4 @@
-import type { Baby, BabyEvent, EventType } from '../types'
+import type { Baby, BabyEvent, EventType, GrowthRecord } from '../types'
 import { emptyStore, loadStore, saveStore, uid, type AppStore } from './store'
 import { nowIso } from './time'
 import { isCloudConfigured, supabase } from './supabase'
@@ -697,6 +697,139 @@ export async function saveDailySummary(
       },
       { onConflict: 'baby_id,day_key' },
     )
+  return error ? { error: error.message } : {}
+}
+
+// ===== 成长记录（身高体重）=====
+
+const GROWTH_KEY = 'baby-tracker-growth'
+
+type GrowthRow = {
+  id: string
+  baby_id: string
+  day_key: string
+  weight_kg?: number | null
+  height_cm?: number | null
+  note?: string | null
+  created_by?: string | null
+  created_at: string
+}
+
+function mapGrowth(row: GrowthRow): GrowthRecord {
+  return {
+    id: row.id,
+    babyId: row.baby_id,
+    dateKey: row.day_key,
+    weightKg: row.weight_kg != null ? Number(row.weight_kg) : null,
+    heightCm: row.height_cm != null ? Number(row.height_cm) : null,
+    note: row.note ?? null,
+    createdBy: row.created_by ?? '',
+    createdAt: row.created_at,
+  }
+}
+
+function loadLocalGrowth(): GrowthRecord[] {
+  try {
+    return JSON.parse(localStorage.getItem(GROWTH_KEY) || '[]')
+  } catch {
+    return []
+  }
+}
+
+function saveLocalGrowth(records: GrowthRecord[]) {
+  try {
+    localStorage.setItem(GROWTH_KEY, JSON.stringify(records))
+  } catch {
+    // ignore
+  }
+}
+
+export async function getGrowthRecords(
+  babyId: string,
+): Promise<{ records?: GrowthRecord[]; error?: string }> {
+  if (!supabase) {
+    return { records: loadLocalGrowth().filter((g) => g.babyId === babyId) }
+  }
+  const user = await getSessionUser()
+  if (!user?.familyId) return { error: '未加入家庭' }
+  const { data, error } = await supabase
+    .from('growth')
+    .select('*')
+    .eq('baby_id', babyId)
+    .order('day_key', { ascending: true })
+  if (error) return { error: error.message }
+  return { records: (data ?? []).map(mapGrowth) }
+}
+
+export async function saveGrowthRecord(input: {
+  babyId: string
+  dateKey: string
+  weightKg?: number | null
+  heightCm?: number | null
+  note?: string | null
+}): Promise<{ error?: string; warning?: string }> {
+  if (!supabase) {
+    const records = loadLocalGrowth().filter(
+      (g) => !(g.babyId === input.babyId && g.dateKey === input.dateKey),
+    )
+    records.push({
+      id: uid(),
+      babyId: input.babyId,
+      dateKey: input.dateKey,
+      weightKg: input.weightKg ?? null,
+      heightCm: input.heightCm ?? null,
+      note: input.note ?? null,
+      createdBy: '',
+      createdAt: nowIso(),
+    })
+    saveLocalGrowth(records)
+    return {}
+  }
+  const user = await getSessionUser()
+  if (!user?.familyId) return { error: '未加入家庭' }
+  const row: Record<string, unknown> = {
+    family_id: user.familyId,
+    baby_id: input.babyId,
+    day_key: input.dateKey,
+    updated_at: nowIso(),
+    created_by: user.displayName,
+  }
+  if (input.weightKg != null) row.weight_kg = input.weightKg
+  if (input.heightCm != null) row.height_cm = input.heightCm
+  if (input.note) row.note = input.note
+
+  // upsert：同一天重复记录就更新
+  const client = supabase
+  const trySave = (r: Record<string, unknown>) =>
+    client.from('growth').upsert(r, { onConflict: 'baby_id,day_key' }).select('*')
+
+  const { error } = await trySave(row)
+  if (error) {
+    // 数据库缺列降级
+    if ('weight_kg' in row || 'height_cm' in row) {
+      const base: Record<string, unknown> = { ...row }
+      delete base.weight_kg
+      delete base.height_cm
+      const retry = await trySave(base)
+      if (!retry.error) return { warning: '记录已保存，但体重/身高未存上' }
+    }
+    return { error: error.message }
+  }
+  return {}
+}
+
+export async function deleteGrowthRecord(id: string): Promise<{ error?: string }> {
+  if (!supabase) {
+    saveLocalGrowth(loadLocalGrowth().filter((g) => g.id !== id))
+    return {}
+  }
+  const user = await getSessionUser()
+  if (!user?.familyId) return { error: '未加入家庭' }
+  const { error } = await supabase
+    .from('growth')
+    .delete()
+    .eq('id', id)
+    .eq('family_id', user.familyId)
   return error ? { error: error.message } : {}
 }
 

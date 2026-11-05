@@ -932,6 +932,48 @@ textarea:focus {
   font-size: 14px;
 }
 
+.growth-form {
+  margin-top: 12px;
+  padding: 14px;
+  background: var(--fill);
+  border-radius: 12px;
+}
+
+.growth-form-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.growth-form-row label {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.growth-form-row input {
+  width: 100%;
+  min-height: 44px;
+  border: none;
+  outline: none;
+  background: var(--bg-elevated);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 16px;
+}
+
+.growth-history {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--fill);
+}
+
+.growth-history-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 0;
+  font-size: 14px;
+}
+
 .danger-text {
   color: var(--red);
 }

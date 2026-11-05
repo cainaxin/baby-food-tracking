@@ -9,7 +9,8 @@ import {
 import { loadSolidTypes, saveSolidTypes } from './lib/solidTypes'
 import { compressImage } from './lib/photo'
 import { fetchDailySummary, askDailyQuestion, type DailySummary } from './lib/summary'
-import { saveDailySummary } from './lib/backend'
+import { saveDailySummary, getGrowthRecords, saveGrowthRecord } from './lib/backend'
+import type { GrowthRecord } from './types'
 import { uid } from './lib/store'
 import {
   addBaby,
@@ -1390,6 +1391,260 @@ function JoinSheet({
   )
 }
 
+/** 成长记录卡片：最新身高体重 + 变化曲线 + 记一笔 */
+function GrowthCard({
+  babyId,
+  onToast,
+}: {
+  babyId: string
+  onToast: (msg: string) => void
+}) {
+  const [records, setRecords] = useState<GrowthRecord[]>([])
+  const [, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [dateKey, setDateKey] = useState(todayKey())
+  const [weight, setWeight] = useState('')
+  const [height, setHeight] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [metric, setMetric] = useState<'weight' | 'height'>('weight')
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const r = await getGrowthRecords(babyId)
+      if (r.records) setRecords(r.records)
+    } finally {
+      setLoading(false)
+    }
+  }, [babyId])
+
+  useEffect(() => {
+    void load()
+  }, [load])
+
+  const latest = records.length ? records[records.length - 1] : null
+
+  const handleSave = async () => {
+    if (!weight.trim() && !height.trim()) return
+    setSaving(true)
+    try {
+      const { error, warning } = await saveGrowthRecord({
+        babyId,
+        dateKey,
+        weightKg: weight.trim() ? Number(weight) : null,
+        heightCm: height.trim() ? Number(height) : null,
+      })
+      if (error) {
+        onToast(error)
+        return
+      }
+      if (warning) onToast(warning)
+      setShowForm(false)
+      setWeight('')
+      setHeight('')
+      await load()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // 曲线数据：只取有值的记录
+  const chartData = records
+    .filter((r) => (metric === 'weight' ? r.weightKg != null : r.heightCm != null))
+    .map((r) => ({
+      dateKey: r.dateKey,
+      value: metric === 'weight' ? Number(r.weightKg) : Number(r.heightCm),
+    }))
+
+  return (
+    <div className="card summary-card">
+      <div className="summary-card-head">
+        <div>
+          <div className="summary-card-title">📏 成长记录</div>
+          <div className="muted small">
+            {latest
+              ? `最近 ${latest.dateKey.slice(5)} · ${latest.weightKg != null ? `${latest.weightKg}kg` : ''} ${latest.heightCm != null ? `${latest.heightCm}cm` : ''}`
+              : '记录身高体重，看成长变化'}
+          </div>
+        </div>
+        <button
+          type="button"
+          className="btn btn-secondary summary-btn"
+          onClick={() => setShowForm((v) => !v)}
+        >
+          {showForm ? '收起' : '记一笔'}
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="growth-form">
+          <div className="growth-form-row">
+            <div style={{ flex: 1 }}>
+              <label className="muted small">日期</label>
+              <input
+                type="date"
+                value={dateKey}
+                onChange={(e) => setDateKey(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="growth-form-row">
+            <div style={{ flex: 1 }}>
+              <label className="muted small">体重（kg）</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                max="50"
+                value={weight}
+                onChange={(e) => setWeight(e.target.value)}
+                placeholder="8.5"
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label className="muted small">身高（cm）</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.1"
+                min="0"
+                max="150"
+                value={height}
+                onChange={(e) => setHeight(e.target.value)}
+                placeholder="72"
+              />
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ marginTop: 10, minHeight: 48, width: '100%' }}
+            disabled={saving || (!weight.trim() && !height.trim())}
+            onClick={handleSave}
+          >
+            {saving ? '保存中…' : '保存'}
+          </button>
+        </div>
+      )}
+
+      {records.length > 0 && (
+        <div style={{ marginTop: 12 }}>
+          <div className="segmented" role="tablist" aria-label="成长指标">
+            {([
+              { v: 'weight' as const, t: '体重 (kg)' },
+              { v: 'height' as const, t: '身高 (cm)' },
+            ]).map((o) => (
+              <button
+                key={o.v}
+                type="button"
+                role="tab"
+                aria-selected={metric === o.v}
+                className={`segmented-item${metric === o.v ? ' active' : ''}`}
+                onClick={() => setMetric(o.v)}
+              >
+                {o.t}
+              </button>
+            ))}
+          </div>
+          {chartData.length >= 2 ? (
+            <GrowthChart data={chartData} unit={metric === 'weight' ? 'kg' : 'cm'} />
+          ) : (
+            <div className="muted small" style={{ textAlign: 'center', padding: '20px 0' }}>
+              再记录一次就能看到变化曲线
+            </div>
+          )}
+          {records.length > 0 && (
+            <div className="growth-history">
+              {records.slice(-5).reverse().map((r) => (
+                <div key={r.id} className="growth-history-item">
+                  <span className="muted small">{r.dateKey.slice(5)}</span>
+                  <span>
+                    {r.weightKg != null ? `${r.weightKg}kg` : '—'}
+                    {r.heightCm != null ? ` · ${r.heightCm}cm` : ''}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** 成长变化曲线（SVG） */
+function GrowthChart({
+  data,
+  unit,
+}: {
+  data: { dateKey: string; value: number }[]
+  unit: string
+}) {
+  const values = data.map((d) => d.value)
+  const max = Math.max(...values)
+  const min = Math.min(...values)
+  const range = max - min || 1
+
+  const W = 320
+  const H = 140
+  const padL = 40
+  const padR = 16
+  const padT = 16
+  const padB = 28
+  const innerW = W - padL - padR
+  const innerH = H - padT - padB
+
+  const points = data.map((d, i) => {
+    const x = padL + (data.length === 1 ? innerW / 2 : (i / (data.length - 1)) * innerW)
+    const y = padT + innerH - ((d.value - min) / range) * innerH
+    return { ...d, x, y }
+  })
+
+  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ')
+
+  return (
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      style={{ width: '100%', marginTop: 10 }}
+      role="img"
+      aria-label="成长变化曲线"
+    >
+      <line x1={padL} y1={padT + innerH} x2={W - padR} y2={padT + innerH} stroke="var(--separator)" />
+      <path d={path} fill="none" stroke="var(--blue)" strokeWidth="2" />
+      {points.map((p) => (
+        <g key={p.dateKey}>
+          <circle cx={p.x} cy={p.y} r="4" fill="var(--blue)" />
+          <text
+            x={p.x}
+            y={p.y - 10}
+            textAnchor="middle"
+            fontSize="10"
+            fill="var(--ink-secondary)"
+          >
+            {p.value}
+          </text>
+          <text
+            x={p.x}
+            y={H - 6}
+            textAnchor="middle"
+            fontSize="9"
+            fill="var(--ink-tertiary)"
+          >
+            {p.dateKey.slice(5)}
+          </text>
+        </g>
+      ))}
+      <text x={4} y={padT + 10} fontSize="10" fill="var(--ink-tertiary)">
+        {max} {unit}
+      </text>
+      <text x={4} y={padT + innerH} fontSize="10" fill="var(--ink-tertiary)">
+        {min} {unit}
+      </text>
+    </svg>
+  )
+}
+
 /** 每日小结卡片：自动加载缓存，支持重新生成，全家共享 */
 function DailySummaryCard({
   baby,
@@ -2247,6 +2502,10 @@ export default function App() {
 
             <div className="section-title">{formatDayLabel(historyDay)} · 当日统计</div>
             <DayStats events={historyEvents} dayKey={historyDay} />
+
+            {baby && (
+              <GrowthCard babyId={baby.id} onToast={setToast} />
+            )}
 
             {baby && (
               <DailySummaryCard

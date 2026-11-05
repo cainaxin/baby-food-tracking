@@ -124,6 +124,29 @@ create policy baby_write on baby
   for all using (is_family_member(family_id))
   with check (is_family_member(family_id));
 
+-- 成长记录：身高体重随时间变化
+create table if not exists growth (
+  id uuid primary key default gen_random_uuid(),
+  family_id uuid not null references family(id) on delete cascade,
+  baby_id uuid not null references baby(id) on delete cascade,
+  day_key text not null,
+  weight_kg numeric,
+  height_cm numeric,
+  note text,
+  created_by text,
+  created_at timestamptz not null default now(),
+  unique (baby_id, day_key)
+);
+
+alter table growth enable row level security;
+
+create policy growth_select on growth
+  for select using (is_family_member(family_id));
+
+create policy growth_write on growth
+  for all using (is_family_member(family_id))
+  with check (is_family_member(family_id));
+
 create policy event_select on event
   for select using (is_family_member(family_id));
 
