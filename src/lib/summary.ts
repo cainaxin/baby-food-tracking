@@ -63,10 +63,21 @@ function summarizeDay(baby: Baby, events: BabyEvent[], dayKey: string): string {
 }
 
 function buildPrompt(baby: Baby, events: BabyEvent[], dayKey: string): string {
+  const now = new Date()
+  const hour = now.getHours()
+  const timeSlot =
+    hour < 6 ? '凌晨' :
+    hour < 9 ? '清晨' :
+    hour < 12 ? '上午' :
+    hour < 14 ? '中午' :
+    hour < 18 ? '下午' :
+    hour < 21 ? '晚上' : '夜间'
   return [
     '你是一位温和专业的婴幼儿养育顾问，用中文回答。',
+    `现在是${dayKey}的${timeSlot}（${String(hour).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}）。`,
     '请根据以下宝宝当天的记录，给出一段简洁的总结和建议（200字以内）。',
-    '格式：先用一两句话总结今天的情况，然后给 1-2 条具体建议（如调整奶量、增加睡眠等），做得好的地方要鼓励。语气亲切、适合老人阅读。',
+    '注意结合时间判断：比如清晨数据少是正常的（一天刚开始），不需要建议补奶量。',
+    '格式：先用一两句话总结今天的情况，然后给 1-2 条具体建议（如调整奶量、增加睡眠、适合外出等），做得好的地方要鼓励。语气亲切、适合老人阅读。',
     '',
     summarizeDay(baby, events, dayKey),
   ].join('\n')
@@ -162,25 +173,43 @@ function fallbackSummary(
   return lines.join('\n')
 }
 
-/** 问答：结合当天数据回答老人的具体问题 */
+/** 问答：结合当天数据、提问人和当前时间回答老人的具体问题 */
 export async function askDailyQuestion(
   baby: Baby,
   events: BabyEvent[],
   dayKey: string,
   question: string,
+  askerName?: string,
 ): Promise<{ answer?: string; error?: string }> {
   const q = question.trim()
   if (!q) return { error: '请输入问题' }
 
+  const now = new Date()
+  const hour = now.getHours()
+  // 时段提示：让 AI 知道现在是一天中的什么时候
+  const timeSlot =
+    hour < 6 ? '凌晨' :
+    hour < 9 ? '清晨' :
+    hour < 12 ? '上午' :
+    hour < 14 ? '中午' :
+    hour < 18 ? '下午' :
+    hour < 21 ? '晚上' : '夜间'
+  const timeStr = `${dayKey} ${String(hour).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  const asker = askerName?.trim() || '家人'
+
   const context = summarizeDay(baby, events, dayKey)
   const prompt = [
     '你是一位温和专业的婴幼儿养育顾问，用中文回答。',
-    '请结合以下宝宝当天的实际数据，回答家长的问题。',
-    '回答要简洁、具体、可执行（100字以内），语气亲切，适合老人阅读。',
+    `提问者是「${asker}」（可能是爸妈或老人），请用亲切自然的语气。`,
+    '请结合以下宝宝当天的实际数据和当前时间，回答问题。',
+    `重要：现在是「${timeSlot}」（${timeStr}）。`,
+    '根据时间判断数据是否正常——比如凌晨/清晨没有喝奶记录是正常的（一天刚开始）；',
+    '也可以根据时间给出建议，比如适合带宝宝外出、该准备睡觉了、该喝奶了等。',
+    '回答要简洁、具体、可执行（100字以内），适合老人阅读。',
     '',
     context,
     '',
-    `家长的问题：${q}`,
+    `${asker}的问题：${q}`,
   ].join('\n')
 
   if (!supabase) {

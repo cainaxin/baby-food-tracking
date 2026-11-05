@@ -1,8 +1,8 @@
 // 由 scripts/build-info.mjs 在 build/dev 前生成，请勿手改
 export const buildInfo = {
-  "version": "0.4.6",
-  "commit": "37dad53",
-  "commitTime": "2026-11-05T00:41:48+08:00",
-  "buildTime": "2026-11-04T16:46:02.002Z",
-  "releaseNotes": "## v0.4.6\n\n修复宝宝性别/体重/身高无法编辑保存的问题。\n\n### 修复\n\n- **宝宝信息保存失败**：保存时带上 `gender/weight_kg/height_cm` 等新字段，但数据库还没加列，整个保存被拒绝。现在改为**降级重试**——带新字段失败时自动去掉新字段只保存基本资料（名字/头像/生日），并 toast 提示\"性别/体重/身高未存上：数据库需补字段\"。\n- **为什么**：和 v0.3.0 的 `photo_url` 同类问题——数据库 schema 变更和前端代码必须解耦，缺列时要降级而不是全挂。\n- **根治方案**：Supabase SQL Editor 执行建列语句后即可正常保存全部信息（见下）。\n\n### 需要执行的 SQL（Supabase SQL Editor）\n\n```sql\nalter table baby add column if not exists gender text;\nalter table baby add column if not exists weight_kg numeric;\nalter table baby add column if not exists height_cm numeric;\n```"
+  "version": "0.4.7",
+  "commit": "d599252",
+  "commitTime": "2026-11-05T00:46:20+08:00",
+  "buildTime": "2026-11-05T03:22:50.370Z",
+  "releaseNotes": "## v0.4.7\n\nAI 问答结合提问人和当前时间，回答更贴合场景。\n\n### 功能\n\n- **提问人身份**：问一问时 AI 知道是谁在提问（\"妈妈的问题\"/\"奶奶的问题\"），用对应称呼和语气。\n- **时间上下文**：AI 知道现在是清晨/上午/下午/晚上，结合时间判断数据是否正常（比如一大早没喝奶记录是正常的），并给出时间相关建议（如\"下午阳光好，适合带宝宝外出\"）。\n- **每日小结也带时间**：生成小结时同样告知 AI 当前时段，避免清晨数据少就建议\"补奶量\"。\n- **为什么**：老人早上打开 App 看到\"奶量偏少\"会焦虑，其实是一天刚开始；AI 需要知道时间才不会给出不合时宜的建议。\n- **实现要点**：`askDailyQuestion()` 新增 `askerName` 参数；提示词注入当前时段（凌晨/清晨/上午/中午/下午/晚上/夜间）和精确时间。"
 } as const

@@ -1396,11 +1396,13 @@ function DailySummaryCard({
   events,
   dayKey,
   title,
+  askerName,
 }: {
   baby: Baby
   events: BabyEvent[]
   dayKey: string
   title?: string
+  askerName?: string
 }) {
   const [summary, setSummary] = useState<DailySummary | null>(null)
   const [loading, setLoading] = useState(false)
@@ -1461,7 +1463,7 @@ function DailySummaryCard({
     setAskError('')
     setAnswer('')
     try {
-      const r = await askDailyQuestion(baby, events, dayKey, text)
+      const r = await askDailyQuestion(baby, events, dayKey, text, askerName)
       if (r.answer) setAnswer(r.answer)
       else setAskError(r.error || '暂时答不上来，请稍后再试')
     } finally {
@@ -2131,6 +2133,7 @@ export default function App() {
                   baby={baby}
                   events={todayEvents}
                   dayKey={todayKey()}
+                  askerName={data.displayName}
                 />
 
                 <div className="section-title">今日时间线</div>
@@ -2251,6 +2254,7 @@ export default function App() {
                 events={historyEvents}
                 dayKey={historyDay}
                 title={`${formatDayLabel(historyDay)} · 每日小结`}
+                askerName={data.displayName}
               />
             )}
 
