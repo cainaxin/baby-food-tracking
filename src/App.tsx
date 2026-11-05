@@ -2518,7 +2518,7 @@ export default function App() {
                 </button>
                 <button
                   type="button"
-                  className="chip"
+                  className={`chip${historyDay === todayKey(new Date(Date.now() - 86400000)) ? ' active' : ''}`}
                   onClick={() => {
                     const d = new Date()
                     d.setDate(d.getDate() - 1)
