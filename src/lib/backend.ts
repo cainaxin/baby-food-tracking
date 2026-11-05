@@ -845,7 +845,6 @@ export async function saveGrowthRecord(input: {
     family_id: user.familyId,
     baby_id: input.babyId,
     day_key: input.dateKey,
-    updated_at: nowIso(),
     created_by: user.displayName,
   }
   if (input.weightKg != null) row.weight_kg = input.weightKg
@@ -859,7 +858,7 @@ export async function saveGrowthRecord(input: {
 
   const { error } = await trySave(row)
   if (error) {
-    // 数据库缺列降级
+    // 数据库缺列/表不存在时降级存本地
     if ('weight_kg' in row || 'height_cm' in row) {
       const base: Record<string, unknown> = { ...row }
       delete base.weight_kg
@@ -867,7 +866,22 @@ export async function saveGrowthRecord(input: {
       const retry = await trySave(base)
       if (!retry.error) return { warning: '记录已保存，但体重/身高未存上' }
     }
-    return { error: error.message }
+    // 云端失败降级存本地
+    const records = loadLocalGrowth().filter(
+      (g) => !(g.babyId === input.babyId && g.dateKey === input.dateKey),
+    )
+    records.push({
+      id: uid(),
+      babyId: input.babyId,
+      dateKey: input.dateKey,
+      weightKg: input.weightKg ?? null,
+      heightCm: input.heightCm ?? null,
+      note: input.note ?? null,
+      createdBy: user.displayName,
+      createdAt: nowIso(),
+    })
+    saveLocalGrowth(records)
+    return { warning: '已存本地，云端同步失败（growth 表可能未创建）' }
   }
   return {}
 }

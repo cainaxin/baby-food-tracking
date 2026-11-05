@@ -1,8 +1,8 @@
 // 由 scripts/build-info.mjs 在 build/dev 前生成，请勿手改
 export const buildInfo = {
-  "version": "0.6.0",
-  "commit": "4244850",
-  "commitTime": "2026-11-05T21:48:49+08:00",
-  "buildTime": "2026-11-05T13:52:51.535Z",
-  "releaseNotes": "## v0.6.0\n\n头像全家同步：所有人可见。\n\n### 功能\n\n- **头像云端同步**：用户头像存 Supabase `family_member.avatar_url`，全家手机都能看到彼此的头像（上传到 storage 存公开 URL，同时写入 `avatar_url` 列）。云端存储失败自动降级本地，不阻断保存。\n- **头像轻量化**：头像压缩到 96×96（约 3-5KB），不给云端存储增加压力。\n- **为什么**：之前头像只存 localStorage，家人之间看不到；全家共享记录也该共享头像。\n- **实现要点**：`getSessionUser` 读 `avatar_url`；`updateProfile` 同时写云端 `family_member.avatar_url` 和本地缓存；缺列时降级。\n\n### 需要执行的 SQL（Supabase SQL Editor）\n\n```sql\nalter table family_member add column if not exists avatar_url text;\n```"
+  "version": "0.6.1",
+  "commit": "4d4b9f0",
+  "commitTime": "2026-11-05T21:53:03+08:00",
+  "buildTime": "2026-11-05T14:12:38.952Z",
+  "releaseNotes": "## v0.6.1\n\n修复 4 个小 bug：成长保存、双人名、小结时间、同步状态。\n\n### 修复\n\n- **身高体重无法保存**：`saveGrowthRecord` 云端 upsert 带了 `updated_at` 字段但 growth 表没有这列，整个保存失败。去掉 `updated_at`，云端失败自动降级存本地。\n- **首页出现两个人名**：`eventSubtitle` 里加了 `createdBy`，时间线旁又单独显示了记录者名，导致重复。去掉 subtitle 里的 createdBy。\n- **每日小结显示生成时间**：标题旁显示「刚刚生成 · HH:mm」或「全家共享 · HH:mm」。\n- **同步状态**：首页顶部从永远显示「全家同步中」改为同步完成后显示「已同步」。\n- **为什么**：都是小问题但影响体验——成长保存失败是最严重的（用户会以为记录丢了）。"
 } as const

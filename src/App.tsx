@@ -189,7 +189,6 @@ function eventSubtitle(ev: BabyEvent): string {
     parts.push(`从 ${formatTime(ev.startAt)} 起 · ${formatDuration(ev.startAt)}`)
   }
   if (ev.note) parts.push(ev.note)
-  if (ev.createdBy) parts.push(ev.createdBy)
   return parts.join(' · ') || formatTime(ev.startAt)
 }
 
@@ -1787,6 +1786,7 @@ function DailySummaryCard({
   const [summary, setSummary] = useState<DailySummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [fromCache, setFromCache] = useState(false)
+  const [generatedAt, setGeneratedAt] = useState('')
   const [expanded, setExpanded] = useState(false)
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
@@ -1811,6 +1811,7 @@ function DailySummaryCard({
         if (!cancelled && r.summary) {
           setSummary(r.summary)
           setFromCache(Boolean(r.fromCache))
+          setGeneratedAt(formatTime(new Date().toISOString()))
         }
       } catch {
         // ignore
@@ -1831,6 +1832,7 @@ function DailySummaryCard({
       if (s) {
         setSummary(s)
         setFromCache(false)
+        setGeneratedAt(formatTime(new Date().toISOString()))
         setExpanded(true)
       }
     } finally {
@@ -1862,7 +1864,9 @@ function DailySummaryCard({
             {fromCache && <span className="summary-badge">已生成</span>}
           </div>
           <div className="muted small">
-            {summary ? (fromCache ? '全家共享，不用重复生成' : '刚刚生成') : '根据当天记录，给你建议'}
+            {summary
+              ? `${fromCache ? '全家共享' : '刚刚生成'}${generatedAt ? ` · ${generatedAt}` : ''}`
+              : '根据当天记录，给你建议'}
           </div>
         </div>
         <button
@@ -2086,6 +2090,8 @@ export default function App() {
   const [aboutTab, setAboutTab] = useState<'version' | 'notes'>('version')
   /** 首页时间线是否展开全部 */
   const [timelineExpanded, setTimelineExpanded] = useState(false)
+  /** 云端同步状态 */
+  const [synced, setSynced] = useState(false)
 
   // 云端写入中的本地记录，刷新时保留，避免被慢同步冲掉
   const pendingEventsRef = useRef<Map<string, BabyEvent>>(new Map())
@@ -2108,6 +2114,7 @@ export default function App() {
       merged.sort((a, b) => b.startAt.localeCompare(a.startAt))
       return { ...next, events: merged, currentBabyId: keptBabyId }
     })
+    if (next.mode === 'cloud') setSynced(true)
     return next
   }, [])
 
@@ -2464,7 +2471,7 @@ export default function App() {
           <header className="header">
             <h1>宝宝日记</h1>
             <p className="muted" style={{ margin: '6px 0 0' }}>
-              {formatDayLabel(todayKey())} · {data.mode === 'cloud' ? '全家同步中' : '本机模式'}
+              {formatDayLabel(todayKey())} · {data.mode === 'cloud' ? (synced ? '已同步' : '全家同步中') : '本机模式'}
             </p>
           </header>
           <div className="page">
