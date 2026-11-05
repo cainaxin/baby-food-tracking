@@ -1444,37 +1444,48 @@ function MiniGrowthCard({
   const heightData = records.filter((r) => r.heightCm != null).slice(-8)
   const latest = records.length ? records[records.length - 1] : null
 
-  if (!records.length) return null
-
   return (
     <div
       className="card"
       style={{ padding: 14, marginTop: 10, cursor: 'pointer' }}
-      onClick={() => onToast('去「成长」页看完整曲线')}
+      onClick={() => onToast('去「成长」页记一笔和看完整曲线')}
     >
       <div className="row-between" style={{ marginBottom: 8 }}>
         <div style={{ fontWeight: 700, fontSize: 15 }}>📏 成长</div>
-        {latest && (
+        {latest ? (
           <div className="muted small">
             {latest.weightKg != null ? `${latest.weightKg}kg` : ''}
             {latest.heightCm != null ? ` · ${latest.heightCm}cm` : ''}
           </div>
+        ) : (
+          <div className="muted small">点这里记录 ›</div>
         )}
       </div>
-      <div style={{ display: 'flex', gap: 12 }}>
-        {weightData.length >= 2 && (
-          <div style={{ flex: 1 }}>
-            <div className="muted small" style={{ marginBottom: 2 }}>体重</div>
-            <MiniSparkline data={weightData.map((r) => Number(r.weightKg))} color="#FF9F0A" />
-          </div>
-        )}
-        {heightData.length >= 2 && (
-          <div style={{ flex: 1 }}>
-            <div className="muted small" style={{ marginBottom: 2 }}>身高</div>
-            <MiniSparkline data={heightData.map((r) => Number(r.heightCm))} color="#30D158" />
-          </div>
-        )}
-      </div>
+      {!records.length ? (
+        <div className="muted small" style={{ textAlign: 'center', padding: '10px 0' }}>
+          还没有成长记录，去「成长」页记一笔体重身高吧
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 12 }}>
+          {weightData.length >= 2 && (
+            <div style={{ flex: 1 }}>
+              <div className="muted small" style={{ marginBottom: 2 }}>体重</div>
+              <MiniSparkline data={weightData.map((r) => Number(r.weightKg))} color="#FF9F0A" />
+            </div>
+          )}
+          {heightData.length >= 2 && (
+            <div style={{ flex: 1 }}>
+              <div className="muted small" style={{ marginBottom: 2 }}>身高</div>
+              <MiniSparkline data={heightData.map((r) => Number(r.heightCm))} color="#30D158" />
+            </div>
+          )}
+          {weightData.length < 2 && heightData.length < 2 && (
+            <div className="muted small" style={{ flex: 1, textAlign: 'center', padding: '10px 0' }}>
+              再记录一次就能看到曲线
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -2073,6 +2084,8 @@ export default function App() {
   const [savedConfirm, setSavedConfirm] = useState<SavedConfirm | null>(null)
   /** 「关于」卡片选项卡：版本信息 / 更新内容 */
   const [aboutTab, setAboutTab] = useState<'version' | 'notes'>('version')
+  /** 首页时间线是否展开全部 */
+  const [timelineExpanded, setTimelineExpanded] = useState(false)
 
   // 云端写入中的本地记录，刷新时保留，避免被慢同步冲掉
   const pendingEventsRef = useRef<Map<string, BabyEvent>>(new Map())
@@ -2513,26 +2526,23 @@ export default function App() {
 
                 <MiniGrowthCard babyId={baby.id} onToast={setToast} />
 
-                <div className="section-title">
-                  今日时间线
-                  <button
-                    type="button"
-                    className="btn-ghost"
-                    style={{ fontSize: 14, marginLeft: 8 }}
-                    onClick={() => setTab('history')}
-                  >
-                    查看全部 ›
-                  </button>
-                </div>
-                {renderTimeline(todayEvents.slice(0, 3))}
+                <DailySummaryCard
+                  baby={baby}
+                  events={todayEvents}
+                  dayKey={todayKey()}
+                  askerName={data.displayName}
+                />
+
+                <div className="section-title">今日时间线</div>
+                {renderTimeline(todayEvents.slice(0, timelineExpanded ? undefined : 3))}
                 {todayEvents.length > 3 && (
                   <button
                     type="button"
                     className="btn-ghost"
                     style={{ width: '100%', textAlign: 'center', padding: '12px 0', color: 'var(--blue)', fontWeight: 600, fontSize: 15 }}
-                    onClick={() => setTab('history')}
+                    onClick={() => setTimelineExpanded((v) => !v)}
                   >
-                    还有 {todayEvents.length - 3} 条，去历史页看 ›
+                    {timelineExpanded ? '收起' : `展开全部 ${todayEvents.length} 条`}
                   </button>
                 )}
               </>
