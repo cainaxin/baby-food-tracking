@@ -1,5 +1,15 @@
 # 更新日志
 
+## v0.5.9
+
+修复头像保存失败和不居中的问题。
+
+### 修复
+
+- **头像拍完保存不了**：`updateProfile` 里云端上传头像失败时没有 try/catch，整个保存被中断。现在云端上传失败自动降级为本地存储，头像一定存得上。
+- **头像不居中**：设置页头像 div 的内联样式 `position: relative` 覆盖了 `.avatar` 的 `display: grid` 居中；`.avatar img` 缺 `display: block`。已修复居中。
+- **为什么**：头像用的是 data URL，上传 Supabase storage 可能失败（网络/大小限制），失败不能阻断保存；CSS 居中被内联样式覆盖。
+
 ## v0.5.8
 
 用户头像 + 时间线显示记录者。

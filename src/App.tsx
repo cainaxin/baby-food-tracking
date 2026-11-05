@@ -2818,7 +2818,7 @@ export default function App() {
               <div className="row" style={{ gap: 14, alignItems: 'center', marginBottom: 14 }}>
                 <div
                   className="avatar avatar-lg"
-                  style={{ background: '#0A84FF', position: 'relative', overflow: 'hidden' }}
+                  style={{ background: '#0A84FF' }}
                 >
                   {data.avatarUrl ? (
                     <img src={data.avatarUrl} alt="我的头像" />

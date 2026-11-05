@@ -228,19 +228,24 @@ export async function updateProfile(input: {
   const user = await getSessionUser()
   if (!user?.familyId) return { error: '未加入家庭' }
 
+  // 头像上传云端：失败也降级存本地，不阻断保存
   let avatarUrl = input.avatarUrl
   if (avatarUrl && avatarUrl.startsWith('data:')) {
-    const uploaded = await uploadAvatar(avatarUrl, user.id)
-    if (uploaded.url) avatarUrl = uploaded.url
+    try {
+      const uploaded = await uploadAvatar(avatarUrl, user.id)
+      avatarUrl = uploaded.url ?? avatarUrl
+    } catch {
+      // 云端上传失败，保留 data URL 存本地
+    }
   }
 
-  // 本地存头像（云端 family_member 表暂无 avatar 列，降级存本地）
+  // 本地存头像（云端 family_member 表暂无 avatar 列）
   const store = loadStore()
   saveStore({
     ...store,
     profile: {
       displayName: input.displayName ?? store.profile.displayName,
-      avatarUrl: avatarUrl ?? null,
+      avatarUrl: avatarUrl !== undefined ? avatarUrl : store.profile.avatarUrl ?? null,
     },
   })
 
