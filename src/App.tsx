@@ -8,7 +8,7 @@ import {
 import { loadSolidTypes, saveSolidTypes } from './lib/solidTypes'
 import { compressImage } from './lib/photo'
 import { fetchDailySummary, askDailyQuestion, type DailySummary } from './lib/summary'
-import { saveDailySummary, saveGrowthRecord, updateProfile } from './lib/backend'
+import { saveDailySummary, saveGrowthRecord, deleteGrowthRecord, updateProfile } from './lib/backend'
 import { getWhoPercentiles, getPercentileZone } from './lib/whoGrowth'
 import { loadGrowthCached, invalidateGrowthCache } from './lib/growthCache'
 import type { GrowthRecord } from './types'
@@ -1546,6 +1546,8 @@ function GrowthCard({
   const [height, setHeight] = useState('')
   const [saving, setSaving] = useState(false)
   const [metric, setMetric] = useState<'weight' | 'height'>('weight')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [showAll, setShowAll] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -1579,6 +1581,7 @@ function GrowthCard({
       }
       if (warning) onToast(warning)
       setShowForm(false)
+      setEditingId(null)
       setWeight('')
       setHeight('')
       invalidateGrowthCache()
@@ -1586,6 +1589,26 @@ function GrowthCard({
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleEdit = (r: GrowthRecord) => {
+    setEditingId(r.id)
+    setDateKey(r.dateKey)
+    setWeight(r.weightKg != null ? String(r.weightKg) : '')
+    setHeight(r.heightCm != null ? String(r.heightCm) : '')
+    setShowForm(true)
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('确定删除这条成长记录吗？')) return
+    const { error } = await deleteGrowthRecord(id)
+    if (error) {
+      onToast(error)
+      return
+    }
+    invalidateGrowthCache()
+    await load()
+    onToast('已删除')
   }
 
   // 曲线数据：只取有值的记录
@@ -1610,9 +1633,22 @@ function GrowthCard({
         <button
           type="button"
           className="btn btn-secondary summary-btn"
-          onClick={() => setShowForm((v) => !v)}
+          onClick={() => {
+            if (showForm) {
+              setShowForm(false)
+              setEditingId(null)
+              setWeight('')
+              setHeight('')
+            } else {
+              setEditingId(null)
+              setDateKey(todayKey())
+              setWeight('')
+              setHeight('')
+              setShowForm(true)
+            }
+          }}
         >
-          {showForm ? '收起' : '记一笔'}
+          {showForm ? '收起' : editingId ? '编辑记录' : '记一笔'}
         </button>
       </div>
 
@@ -1663,7 +1699,7 @@ function GrowthCard({
             disabled={saving || (!weight.trim() && !height.trim())}
             onClick={handleSave}
           >
-            {saving ? '保存中…' : '保存'}
+            {saving ? '保存中…' : editingId ? '保存修改' : '保存'}
           </button>
         </div>
       )}
@@ -1702,15 +1738,43 @@ function GrowthCard({
           )}
           {records.length > 0 && (
             <div className="growth-history">
-              {records.slice(-5).reverse().map((r) => (
+              {(showAll ? [...records].reverse() : records.slice(-5).reverse()).map((r) => (
                 <div key={r.id} className="growth-history-item">
                   <span className="muted small">{r.dateKey.slice(5)}</span>
-                  <span>
+                  <span style={{ flex: 1, textAlign: 'center' }}>
                     {r.weightKg != null ? `${r.weightKg}kg` : '—'}
                     {r.heightCm != null ? ` · ${r.heightCm}cm` : ''}
                   </span>
+                  <span style={{ display: 'flex', gap: 4 }}>
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      style={{ fontSize: 12, color: 'var(--blue)', padding: '4px 8px' }}
+                      onClick={() => handleEdit(r)}
+                    >
+                      编辑
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-ghost"
+                      style={{ fontSize: 12, color: 'var(--red)', padding: '4px 8px' }}
+                      onClick={() => handleDelete(r.id)}
+                    >
+                      删除
+                    </button>
+                  </span>
                 </div>
               ))}
+              {records.length > 5 && (
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  style={{ width: '100%', textAlign: 'center', padding: '8px 0', color: 'var(--blue)', fontSize: 14 }}
+                  onClick={() => setShowAll((v) => !v)}
+                >
+                  {showAll ? '收起' : `展开全部 ${records.length} 条`}
+                </button>
+              )}
             </div>
           )}
         </div>
