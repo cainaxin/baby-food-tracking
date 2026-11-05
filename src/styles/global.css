@@ -388,8 +388,9 @@ textarea:focus {
   backdrop-filter: blur(16px);
   border-top: 1px solid var(--separator);
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   z-index: 40;
+  align-items: center;
 }
 
 .nav-item {
@@ -997,43 +998,42 @@ textarea:focus {
   font-size: 14px;
 }
 
-/* 底部中央大圆按钮 */
-.fab-record {
-  position: fixed;
-  bottom: calc(var(--nav-height) + var(--safe-bottom) + 12px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 50;
+/* 底栏中央大圆按钮 */
+.nav-fab {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
   border: none;
-  cursor: pointer;
   background: none;
+  cursor: pointer;
+  padding: 0;
+  align-self: center;
+  justify-self: center;
+  margin-top: -22px;
 }
 
-.fab-icon {
-  width: 60px;
-  height: 60px;
+.nav-fab-circle {
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  background: var(--blue);
+  background: linear-gradient(135deg, #0a84ff 0%, #5e5ce6 100%);
   color: #fff;
-  font-size: 30px;
+  font-size: 28px;
   font-weight: 300;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 4px 16px rgba(10, 132, 255, 0.4);
-  transition: transform 0.15s;
+  box-shadow: 0 4px 16px rgba(10, 132, 255, 0.35), 0 1px 4px rgba(0, 0, 0, 0.1);
+  transition: transform 0.15s, box-shadow 0.15s;
 }
 
-.fab-record:active .fab-icon {
-  transform: scale(0.92);
-  background: var(--blue-pressed);
+.nav-fab:active .nav-fab-circle {
+  transform: scale(0.9);
+  box-shadow: 0 2px 8px rgba(10, 132, 255, 0.3);
 }
 
-.fab-label {
+.nav-fab-label {
   font-size: 11px;
   font-weight: 600;
   color: var(--blue);

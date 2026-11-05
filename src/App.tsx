@@ -2461,18 +2461,6 @@ export default function App() {
               </div>
             )}
           </div>
-
-          {/* 底部中央大圆按钮：记一笔 */}
-          {baby && (
-            <button
-              type="button"
-              className="fab-record"
-              onClick={() => setSheet({ kind: 'typePicker' })}
-            >
-              <span className="fab-icon">＋</span>
-              <span className="fab-label">记一笔</span>
-            </button>
-          )}
         </>
       )}
 
@@ -2859,6 +2847,31 @@ export default function App() {
           [
             { id: 'home', label: '首页', icon: '🏠' },
             { id: 'history', label: '历史', icon: '📅' },
+          ] as const
+        ).map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`nav-item${tab === item.id ? ' active' : ''}`}
+            onClick={() => setTab(item.id)}
+          >
+            <span className="nav-icon">{item.icon}</span>
+            <span>{item.label}</span>
+          </button>
+        ))}
+        {/* 中央大圆按钮：记一笔 */}
+        {baby && (
+          <button
+            type="button"
+            className="nav-fab"
+            onClick={() => setSheet({ kind: 'typePicker' })}
+          >
+            <span className="nav-fab-circle">＋</span>
+            <span className="nav-fab-label">记一笔</span>
+          </button>
+        )}
+        {(
+          [
             { id: 'settings', label: '我的', icon: '👤' },
           ] as const
         ).map((item) => (
@@ -2872,6 +2885,8 @@ export default function App() {
             <span>{item.label}</span>
           </button>
         ))}
+        {/* 占位保持 5 格对称 */}
+        <div />
       </nav>
 
       {toast && (
