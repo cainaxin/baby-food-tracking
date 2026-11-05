@@ -2842,7 +2842,7 @@ export default function App() {
                         e.target.value = ''
                         if (!file) return
                         try {
-                          const compressed = await compressImage(file, 256, 0.85)
+                          const compressed = await compressImage(file, 96, 0.8)
                           const { error } = await updateProfile({ avatarUrl: compressed })
                           if (error) {
                             setToast(error)

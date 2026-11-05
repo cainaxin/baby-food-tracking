@@ -9,6 +9,7 @@ export type SessionUser = {
   id: string
   email: string
   displayName: string
+  avatarUrl?: string | null
   familyId: string | null
   inviteCode: string | null
 }
@@ -97,7 +98,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   // 可能存在历史多条成员记录（自动建家后又加入共享家庭），取最新一条
   const { data: members, error: memErr } = await supabase
     .from('family_member')
-    .select('family_id, display_name, created_at')
+    .select('family_id, display_name, avatar_url, created_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
@@ -120,6 +121,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     id: user.id,
     email: user.email ?? '',
     displayName: member?.display_name || user.email?.split('@')[0] || '家人',
+    avatarUrl: member?.avatar_url ?? null,
     familyId: member?.family_id ?? null,
     inviteCode: invite,
   }
@@ -228,7 +230,7 @@ export async function updateProfile(input: {
   const user = await getSessionUser()
   if (!user?.familyId) return { error: '未加入家庭' }
 
-  // 头像上传云端：失败也降级存本地，不阻断保存
+  // 头像上传云端 storage；失败降级存本地
   let avatarUrl = input.avatarUrl
   if (avatarUrl && avatarUrl.startsWith('data:')) {
     try {
@@ -239,7 +241,7 @@ export async function updateProfile(input: {
     }
   }
 
-  // 本地存头像（云端 family_member 表暂无 avatar 列）
+  // 本地存一份（离线也能看）
   const store = loadStore()
   saveStore({
     ...store,
@@ -249,13 +251,22 @@ export async function updateProfile(input: {
     },
   })
 
-  if (input.displayName !== undefined) {
-    const { error } = await supabase
-      .from('family_member')
-      .update({ display_name: input.displayName })
-      .eq('family_id', user.familyId)
-      .eq('user_id', user.id)
-    if (error) return { error: error.message }
+  // 写云端 family_member（全家同步）
+  const updateRow: Record<string, unknown> = {}
+  if (input.displayName !== undefined) updateRow.display_name = input.displayName
+  if (avatarUrl !== undefined) updateRow.avatar_url = avatarUrl
+  if (Object.keys(updateRow).length) {
+    try {
+      const { error } = await supabase
+        .from('family_member')
+        .update(updateRow)
+        .eq('family_id', user.familyId)
+        .eq('user_id', user.id)
+      if (error) return { error: error.message }
+    } catch {
+      // 缺列降级：头像只存本地
+      return { warning: '头像已本地保存，云端同步失败' }
+    }
   }
   return {}
 }
@@ -288,7 +299,7 @@ export async function loadData(): Promise<AppData> {
       events: [],
       currentBabyId: null,
       displayName: user?.displayName ?? '家人',
-      avatarUrl: localProfile.avatarUrl ?? null,
+      avatarUrl: user?.avatarUrl ?? localProfile.avatarUrl ?? null,
     }
   }
 
@@ -318,7 +329,7 @@ export async function loadData(): Promise<AppData> {
     events,
     currentBabyId,
     displayName: user.displayName,
-    avatarUrl: localProfile.avatarUrl ?? null,
+    avatarUrl: user.avatarUrl ?? localProfile.avatarUrl ?? null,
   }
 }
 

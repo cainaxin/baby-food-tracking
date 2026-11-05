@@ -37,6 +37,9 @@ alter table baby add column if not exists gender text;
 alter table baby add column if not exists weight_kg numeric;
 alter table baby add column if not exists height_cm numeric;
 
+-- 用户头像：全家同步
+alter table family_member add column if not exists avatar_url text;
+
 -- 每日小结缓存（全家共享，避免重复生成）
 create table if not exists daily_summary (
   id uuid primary key default gen_random_uuid(),

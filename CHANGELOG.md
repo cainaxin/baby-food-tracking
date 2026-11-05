@@ -1,5 +1,22 @@
 # 更新日志
 
+## v0.6.0
+
+头像全家同步：所有人可见。
+
+### 功能
+
+- **头像云端同步**：用户头像存 Supabase `family_member.avatar_url`，全家手机都能看到彼此的头像（上传到 storage 存公开 URL，同时写入 `avatar_url` 列）。云端存储失败自动降级本地，不阻断保存。
+- **头像轻量化**：头像压缩到 96×96（约 3-5KB），不给云端存储增加压力。
+- **为什么**：之前头像只存 localStorage，家人之间看不到；全家共享记录也该共享头像。
+- **实现要点**：`getSessionUser` 读 `avatar_url`；`updateProfile` 同时写云端 `family_member.avatar_url` 和本地缓存；缺列时降级。
+
+### 需要执行的 SQL（Supabase SQL Editor）
+
+```sql
+alter table family_member add column if not exists avatar_url text;
+```
+
 ## v0.5.9
 
 修复头像保存失败和不居中的问题。
