@@ -33,14 +33,21 @@ export function formatDayLabel(key: string): string {
   return `${Number(m)} 月 ${Number(d)} 日`
 }
 
+/** 解析 YYYY-MM-DD 为本地年月日，避免 new Date() 的 UTC 偏移问题 */
+function parseDateParts(dateStr: string): { y: number; m: number; d: number } | null {
+  const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!m) return null
+  return { y: +m[1], m: +m[2] - 1, d: +m[3] }
+}
+
 /** 从生日算月龄，如 "3 个月"、"1 岁 2 个月" */
 export function formatMonthAge(birthDate: string | null | undefined): string {
   if (!birthDate) return ''
-  const birth = new Date(birthDate)
-  if (Number.isNaN(birth.getTime())) return ''
+  const b = parseDateParts(birthDate)
+  if (!b) return ''
   const now = new Date()
-  let months = (now.getFullYear() - birth.getFullYear()) * 12 + (now.getMonth() - birth.getMonth())
-  if (now.getDate() < birth.getDate()) months--
+  let months = (now.getFullYear() - b.y) * 12 + (now.getMonth() - b.m)
+  if (now.getDate() < b.d) months--
   if (months < 0) return ''
   if (months < 12) return `${months} 个月`
   const y = Math.floor(months / 12)

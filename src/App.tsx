@@ -134,14 +134,18 @@ function isCrossDay(startIso: string, endIso: string): boolean {
   return todayKey(new Date(startIso)) !== todayKey(new Date(endIso))
 }
 
-/** 从 dayKey 算月龄（距出生），需要传入出生日期 */
+/** 从 dayKey 算月龄（距出生），避免 new Date() 的 UTC 偏移 */
 function getMonthAgeFromDate(dateKey: string, birthDate: string | null | undefined): number {
   if (!birthDate) return 0
-  const d = new Date(dateKey)
-  const b = new Date(birthDate)
-  if (Number.isNaN(d.getTime()) || Number.isNaN(b.getTime())) return 0
-  let months = (d.getFullYear() - b.getFullYear()) * 12 + (d.getMonth() - b.getMonth())
-  if (d.getDate() < b.getDate()) months--
+  const parse = (s: string) => {
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    return m ? { y: +m[1], mo: +m[2] - 1, d: +m[3] } : null
+  }
+  const b = parse(birthDate)
+  const d = parse(dateKey)
+  if (!b || !d) return 0
+  let months = (d.y - b.y) * 12 + (d.mo - b.mo)
+  if (d.d < b.d) months--
   return Math.max(0, months)
 }
 
