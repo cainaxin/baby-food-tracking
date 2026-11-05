@@ -997,61 +997,91 @@ textarea:focus {
   font-size: 14px;
 }
 
-/* 底部固定快捷记录栏 */
-.quick-bar {
+/* 底部中央大圆按钮 */
+.fab-record {
   position: fixed;
-  bottom: calc(var(--nav-height) + var(--safe-bottom));
-  left: 0;
-  right: 0;
-  z-index: 40;
-  display: flex;
-  gap: 2px;
-  padding: 8px 8px 6px;
-  background: rgba(255, 255, 255, 0.92);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-  border-top: 0.5px solid var(--separator);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-
-.quick-bar::-webkit-scrollbar {
-  display: none;
-}
-
-.quick-bar-btn {
-  flex: 1;
-  min-width: 0;
+  bottom: calc(var(--nav-height) + var(--safe-bottom) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 4px 0 2px;
   border: none;
-  background: none;
   cursor: pointer;
-  border-radius: 10px;
+  background: none;
 }
 
-.quick-bar-btn:active {
+.fab-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #fff;
+  font-size: 30px;
+  font-weight: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(10, 132, 255, 0.4);
+  transition: transform 0.15s;
+}
+
+.fab-record:active .fab-icon {
+  transform: scale(0.92);
+  background: var(--blue-pressed);
+}
+
+.fab-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--blue);
+}
+
+/* 类型选择弹层 */
+.type-picker {
+  padding-bottom: calc(var(--safe-bottom) + 16px);
+}
+
+.type-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.type-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 4px;
+  border: none;
+  border-radius: 14px;
   background: var(--fill);
+  cursor: pointer;
+  transition: background 0.15s;
 }
 
-.quick-bar-icon {
-  width: 36px;
-  height: 36px;
+.type-card:active {
+  background: var(--fill-strong);
+  transform: scale(0.95);
+}
+
+.type-card-icon {
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 26px;
 }
 
-.quick-bar-label {
-  font-size: 10px;
-  color: var(--ink-secondary);
-  white-space: nowrap;
+.type-card-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
 }
 
 .danger-text {

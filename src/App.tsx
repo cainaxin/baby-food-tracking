@@ -45,11 +45,18 @@ import {
 import { buildInfo } from './generated/buildInfo'
 
 type Tab = 'home' | 'history' | 'settings'
+/** 记一笔类型选择顺序 */
+const QUICK_TYPES_LIST: EventType[] = [
+  'milk', 'solid', 'water', 'diaper',
+  'sleep', 'wake', 'outing', 'bath_swim',
+]
+
 type Sheet =
   | { kind: 'event'; type: EventType; editId?: string }
   | { kind: 'baby'; babyId?: string }
   | { kind: 'switch' }
   | { kind: 'join' }
+  | { kind: 'typePicker' }
   | null
 
 /** 保存成功后的确认弹窗数据（展示刚写入的记录，可撤销重编辑） */
@@ -1976,8 +1983,7 @@ export default function App() {
   const [savedConfirm, setSavedConfirm] = useState<SavedConfirm | null>(null)
   /** 「关于」卡片选项卡：版本信息 / 更新内容 */
   const [aboutTab, setAboutTab] = useState<'version' | 'notes'>('version')
-  /** 底部快捷栏「更多」展开态 */
-  const [showMoreQuick, setShowMoreQuick] = useState(false)
+
   // 云端写入中的本地记录，刷新时保留，避免被慢同步冲掉
   const pendingEventsRef = useRef<Map<string, BabyEvent>>(new Map())
   const pendingDeletesRef = useRef<Set<string>>(new Set())
@@ -2456,42 +2462,16 @@ export default function App() {
             )}
           </div>
 
-          {/* 底部固定快捷记录栏：4 个常用 + 更多 */}
+          {/* 底部中央大圆按钮：记一笔 */}
           {baby && (
-            <div className="quick-bar">
-              {(showMoreQuick
-                ? (['water', 'solid', 'outing', 'bath_swim'] as const)
-                : (['milk', 'sleep', 'wake', 'diaper'] as const)
-              ).map((t) => {
-                const meta = EVENT_META[t]
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    className="quick-bar-btn"
-                    onClick={() => {
-                      setSheet({ kind: 'event', type: t })
-                      setShowMoreQuick(false)
-                    }}
-                  >
-                    <span className="quick-bar-icon" style={{ background: `${meta.color}22` }}>
-                      {meta.icon}
-                    </span>
-                    <span className="quick-bar-label">{meta.label}</span>
-                  </button>
-                )
-              })}
-              <button
-                type="button"
-                className="quick-bar-btn"
-                onClick={() => setShowMoreQuick((v) => !v)}
-              >
-                <span className="quick-bar-icon" style={{ background: '#8e8e9322' }}>
-                  {showMoreQuick ? '↩' : '⋯'}
-                </span>
-                <span className="quick-bar-label">{showMoreQuick ? '返回' : '更多'}</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              className="fab-record"
+              onClick={() => setSheet({ kind: 'typePicker' })}
+            >
+              <span className="fab-icon">＋</span>
+              <span className="fab-label">记一笔</span>
+            </button>
           )}
         </>
       )}
@@ -2997,6 +2977,47 @@ export default function App() {
             setToast('已加入家庭')
           }}
         />
+      )}
+
+      {/* 记一笔：类型选择弹层 */}
+      {sheet?.kind === 'typePicker' && (
+        <div className="sheet-backdrop" onClick={() => setSheet(null)}>
+          <div className="sheet type-picker" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-handle" />
+            <h2 className="sheet-title" style={{ textAlign: 'center', marginBottom: 16 }}>
+              记什么？
+            </h2>
+            <div className="type-grid">
+              {QUICK_TYPES_LIST.map((t) => {
+                const meta = EVENT_META[t]
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    className="type-card"
+                    onClick={() => setSheet({ kind: 'event', type: t })}
+                  >
+                    <span
+                      className="type-card-icon"
+                      style={{ background: `${meta.color}18`, color: meta.color }}
+                    >
+                      {meta.icon}
+                    </span>
+                    <span className="type-card-label">{meta.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <button
+              type="button"
+              className="btn-ghost"
+              style={{ width: '100%', minHeight: 48, marginTop: 12 }}
+              onClick={() => setSheet(null)}
+            >
+              取消
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )
