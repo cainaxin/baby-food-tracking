@@ -33,9 +33,9 @@ export function formatDayLabel(key: string): string {
   return `${Number(m)} 月 ${Number(d)} 日`
 }
 
-/** 解析 YYYY-MM-DD 为本地年月日，避免 new Date() 的 UTC 偏移问题 */
+/** 解析 YYYY-MM-DD 为本地年月日，兼容无前导零格式 */
 function parseDateParts(dateStr: string): { y: number; m: number; d: number } | null {
-  const m = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  const m = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
   if (!m) return null
   return { y: +m[1], m: +m[2] - 1, d: +m[3] }
 }

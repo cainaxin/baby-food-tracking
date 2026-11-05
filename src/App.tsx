@@ -134,11 +134,12 @@ function isCrossDay(startIso: string, endIso: string): boolean {
   return todayKey(new Date(startIso)) !== todayKey(new Date(endIso))
 }
 
-/** 从 dayKey 算月龄（距出生），避免 new Date() 的 UTC 偏移 */
+/** 从 dayKey 算月龄（距出生），健壮解析多种日期格式 */
 function getMonthAgeFromDate(dateKey: string, birthDate: string | null | undefined): number {
   if (!birthDate) return 0
   const parse = (s: string) => {
-    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+    // 兼容 "2026-03-05"、"2026-03-05T..."、"2026-3-5" 等格式
+    const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
     return m ? { y: +m[1], mo: +m[2] - 1, d: +m[3] } : null
   }
   const b = parse(birthDate)
@@ -1632,6 +1633,11 @@ function GrowthCard({
             {latest
               ? `最近 ${latest.dateKey.slice(5)} · ${latest.weightKg != null ? `${latest.weightKg}kg` : ''} ${latest.heightCm != null ? `${latest.heightCm}cm` : ''}`
               : '记录身高体重，看成长变化'}
+            {baby?.birthDate && (
+              <span style={{ marginLeft: 8, color: 'var(--blue)', fontSize: 11 }}>
+                （生日 {baby.birthDate} · 当前 {formatMonthAge(baby.birthDate)}）
+              </span>
+            )}
           </div>
         </div>
         <button
