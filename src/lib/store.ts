@@ -11,7 +11,7 @@ export interface AppStore {
 
 export function emptyStore(): AppStore {
   return {
-    profile: { displayName: '家人' },
+    profile: { displayName: '家人', avatarUrl: null },
     babies: [],
     events: [],
     currentBabyId: null,

@@ -20,6 +20,7 @@ export type AppData = {
   events: BabyEvent[]
   currentBabyId: string | null
   displayName: string
+  avatarUrl?: string | null
 }
 
 /** 本地模式下的假用户，保证未配置云时仍可使用 */
@@ -209,20 +210,53 @@ export async function joinFamilyByInvite(
   return {}
 }
 
-export async function updateDisplayName(displayName: string): Promise<{ error?: string }> {
+export async function updateProfile(input: {
+  displayName?: string
+  avatarUrl?: string | null
+}): Promise<{ error?: string; warning?: string }> {
   if (!supabase) {
     const store = loadStore()
-    saveStore({ ...store, profile: { displayName } })
+    saveStore({
+      ...store,
+      profile: {
+        displayName: input.displayName ?? store.profile.displayName,
+        avatarUrl: input.avatarUrl !== undefined ? input.avatarUrl : store.profile.avatarUrl ?? null,
+      },
+    })
     return {}
   }
   const user = await getSessionUser()
   if (!user?.familyId) return { error: '未加入家庭' }
-  const { error } = await supabase
-    .from('family_member')
-    .update({ display_name: displayName })
-    .eq('family_id', user.familyId)
-    .eq('user_id', user.id)
-  return error ? { error: error.message } : {}
+
+  let avatarUrl = input.avatarUrl
+  if (avatarUrl && avatarUrl.startsWith('data:')) {
+    const uploaded = await uploadAvatar(avatarUrl, user.id)
+    if (uploaded.url) avatarUrl = uploaded.url
+  }
+
+  // 本地存头像（云端 family_member 表暂无 avatar 列，降级存本地）
+  const store = loadStore()
+  saveStore({
+    ...store,
+    profile: {
+      displayName: input.displayName ?? store.profile.displayName,
+      avatarUrl: avatarUrl ?? null,
+    },
+  })
+
+  if (input.displayName !== undefined) {
+    const { error } = await supabase
+      .from('family_member')
+      .update({ display_name: input.displayName })
+      .eq('family_id', user.familyId)
+      .eq('user_id', user.id)
+    if (error) return { error: error.message }
+  }
+  return {}
+}
+
+export async function updateDisplayName(displayName: string): Promise<{ error?: string }> {
+  return updateProfile({ displayName })
 }
 
 export async function loadData(): Promise<AppData> {
@@ -235,10 +269,12 @@ export async function loadData(): Promise<AppData> {
       events: store.events,
       currentBabyId: store.currentBabyId,
       displayName: store.profile.displayName,
+      avatarUrl: store.profile.avatarUrl ?? null,
     }
   }
 
   const user = await getSessionUser()
+  const localProfile = loadStore().profile
   if (!user?.familyId) {
     return {
       mode: 'cloud',
@@ -247,6 +283,7 @@ export async function loadData(): Promise<AppData> {
       events: [],
       currentBabyId: null,
       displayName: user?.displayName ?? '家人',
+      avatarUrl: localProfile.avatarUrl ?? null,
     }
   }
 
@@ -276,6 +313,7 @@ export async function loadData(): Promise<AppData> {
     events,
     currentBabyId,
     displayName: user.displayName,
+    avatarUrl: localProfile.avatarUrl ?? null,
   }
 }
 

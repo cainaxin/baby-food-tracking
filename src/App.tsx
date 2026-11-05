@@ -8,7 +8,7 @@ import {
 import { loadSolidTypes, saveSolidTypes } from './lib/solidTypes'
 import { compressImage } from './lib/photo'
 import { fetchDailySummary, askDailyQuestion, type DailySummary } from './lib/summary'
-import { saveDailySummary, getGrowthRecords, saveGrowthRecord } from './lib/backend'
+import { saveDailySummary, getGrowthRecords, saveGrowthRecord, updateProfile } from './lib/backend'
 import type { GrowthRecord } from './types'
 import { uid } from './lib/store'
 import {
@@ -2419,6 +2419,12 @@ export default function App() {
                 </div>
                 <div className="timeline-meta">
                   {formatTime(ev.startAt)} · {eventSubtitle(ev)}
+                  {ev.createdBy && (
+                    <span className="timeline-author">
+                      <span className="timeline-author-dot" aria-hidden />
+                      {ev.createdBy}
+                    </span>
+                  )}
                 </div>
                 {ev.photoUrl && (
                   <img src={ev.photoUrl} alt="辅食照片" className="timeline-photo" />
@@ -2809,6 +2815,49 @@ export default function App() {
 
             <div className="section-title">账号</div>
             <div className="card" style={{ padding: 16 }}>
+              <div className="row" style={{ gap: 14, alignItems: 'center', marginBottom: 14 }}>
+                <div
+                  className="avatar avatar-lg"
+                  style={{ background: '#0A84FF', position: 'relative', overflow: 'hidden' }}
+                >
+                  {data.avatarUrl ? (
+                    <img src={data.avatarUrl} alt="我的头像" />
+                  ) : (
+                    (data.displayName || '家').slice(0, 1)
+                  )}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 700, fontSize: 18 }}>{data.displayName || '家人'}</div>
+                  <label
+                    className="btn-ghost"
+                    style={{ cursor: 'pointer', color: 'var(--blue)', fontSize: 14, fontWeight: 600 }}
+                  >
+                    {data.avatarUrl ? '更换头像' : '上传头像'}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0]
+                        e.target.value = ''
+                        if (!file) return
+                        try {
+                          const compressed = await compressImage(file, 256, 0.85)
+                          const { error } = await updateProfile({ avatarUrl: compressed })
+                          if (error) {
+                            setToast(error)
+                            return
+                          }
+                          await refresh()
+                          setToast('头像已更新')
+                        } catch {
+                          setToast('图片处理失败')
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
               <div className="field" style={{ marginTop: 0 }}>
                 <label>我的称呼（记录里会显示）</label>
                 <input

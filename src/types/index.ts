@@ -41,6 +41,8 @@ export interface BabyEvent {
 
 export interface FamilyProfile {
   displayName: string
+  /** 用户头像（data URL 或云端 URL） */
+  avatarUrl?: string | null
 }
 
 /** 成长记录：按日期记录身高体重 */
