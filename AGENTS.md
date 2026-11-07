@@ -12,9 +12,9 @@ npm run build      # tsc -b && vite build（网页版，含 PWA / Service Worker
 npm run preview    # 预览生产构建
 npm run lint       # eslint
 
-# —— 安卓 APK ——
-npm run android:apk   # 版本同步 → 原生构建（BUILD_NATIVE=1，无 SW）→ cap sync → assembleDebug
-# 产物：android/app/build/outputs/apk/debug/app-debug.apk
+# —— 发版（网页版 + 安卓 APK 双资产）——
+node scripts/release.mjs v0.8.0 "描述"   # 构建网页包+APK，创建 Release 并上传
+# 也可以单独构建 APK：npm run android:apk → android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
 无单测框架时，以 `npm run build` + 手动点验为准。
@@ -38,6 +38,7 @@ npm run android:apk   # 版本同步 → 原生构建（BUILD_NATIVE=1，无 SW�
 - **校验**：只在边界校验（奶量 0–2000、必填时间）；信任内部 store。
 - **提交与变更记录**：每次修改完成后必须 `git commit` 便于追溯，并同步更新 `CHANGELOG.md`（写清**改了什么、为什么改**）。
 - **版本号**：有用户可感知的功能/修复改动时，同步 bump `package.json` 的 `version`（patch/minor），并在 CHANGELOG 将 Unreleased 段落归入该版本号下。版本号显示在「我的 → 关于」，家人靠它确认手机上是不是最新版。
+- **双端同步发版**：每次版本更新必须**同时发布网页版和安卓 APK**，不能只更一端。`node scripts/release.mjs` 自动打包两个资产（`baby-dist-vX.tar.gz` + `baby-food-tracker-vX.X.X.apk`）上传到同一 Release。家人手机上如果装了 APK，也要让他们更新 APK 而不是只刷网页。
 - **按天归档**：改动、事故、关键决策写入 `docs/journal/YYYY-MM-DD.md`；失败案例必须含「现象 / 原因 / 反思 / 禁止事项」。同步维护 `docs/journal/INDEX.md`（关键词索引），新对话先查 INDEX 再动手。
 - **推送**：改好版本并自测通过后，必须 `git push` 到远程，避免本地修复未上线。
 - **发版到 OpenWrt**：每次发版须让 Agent 自动完成，不要手动上传——`npm run build` → `tar -czf baby-dist-vX.tar.gz dist` → 用 GitHub API（凭据从 `git credential fill` 取 token）创建 Release 并上传 tar 包 → 在 OpenWrt 上 `wget` 下载后解压覆盖 `/root/baby-food-tracker/dist`。Tag 命名 `vX.Y.Z`，目标 commit 填 `main`。

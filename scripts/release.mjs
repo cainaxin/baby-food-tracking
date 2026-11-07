@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// 发版脚本：打包 dist 并创建 GitHub Release + 上传资产。
+// 发版脚本：打包 dist + APK，创建 GitHub Release 并上传双资产。
 // 用法：node scripts/release.mjs v0.4.5 "描述文字"
 // 凭据：从 git credential fill 取 token（与 git push 同一套凭据）。
 // 注意：所有 HTTP body 用 UTF-8 编码，避免 PowerShell 发 Release 描述中文变问号。
 
 import { execSync } from 'node:child_process'
-import { readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, statSync, copyFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -18,19 +18,39 @@ if (!tag || !/^v\d+\.\d+\.\d+$/.test(tag)) {
 }
 
 const repo = 'cainaxin/baby-food-tracking'
-const tarName = `baby-dist-${tag.replace(/\./g, '-')}.tar.gz`
+const ver = tag.replace(/\./g, '-')
+const tarName = `baby-dist-${ver}.tar.gz`
+const apkName = `baby-food-tracker-${tag}.apk`
 
 function sh(cmd) {
+  return execSync(cmd, { cwd: root, encoding: 'utf8', stdio: 'inherit' })
+}
+
+function shCapture(cmd) {
   return execSync(cmd, { cwd: root, encoding: 'utf8' }).trim()
 }
 
-// 1. 构建 + 打包
-console.log('▸ 构建 dist…')
+// 1. 构建网页版 dist + 打包
+console.log('▸ 构建网页版 dist…')
 sh('npm run build')
 console.log(`▸ 打包 ${tarName}…`)
-sh(`tar -czf ${tarName} -C dist .`)
+shCapture(`tar -czf ${tarName} -C dist .`)
 
-// 2. 取 GitHub token（与 git push 同一套凭据）
+// 2. 构建安卓 APK（BUILD_NATIVE=1，无 Service Worker）
+console.log('▸ 构建安卓 APK…')
+sh('node scripts/sync-android-version.mjs')
+sh('npm run build:native')
+sh('npx cap sync android')
+sh('build-apk.bat')
+const apkSrc = join(root, 'android', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk')
+if (!existsSync(apkSrc)) {
+  console.error('APK 未生成:', apkSrc)
+  process.exit(1)
+}
+copyFileSync(apkSrc, join(root, apkName))
+console.log(`  ${apkName} (${statSync(join(root, apkName)).size} bytes)`)
+
+// 3. 取 GitHub token（与 git push 同一套凭据）
 const cred = execSync('git credential fill', {
   cwd: root,
   encoding: 'utf8',
@@ -49,7 +69,7 @@ const headers = {
   'Content-Type': 'application/json; charset=utf-8',
 }
 
-// 3. 创建 Release（body 用 UTF-8 字节，中文才不会变问号）
+// 4. 创建 Release（body 用 UTF-8 字节，中文才不会变问号）
 console.log(`▸ 创建 Release ${tag}…`)
 const releaseBody = JSON.stringify({
   tag_name: tag,
@@ -69,27 +89,33 @@ if (!releaseRes.ok) {
 const release = await releaseRes.json()
 console.log(`  release_id=${release.id}`)
 
-// 4. 上传资产
-console.log(`▸ 上传 ${tarName}…`)
-const bytes = readFileSync(join(root, tarName))
-const uploadRes = await fetch(
-  `https://uploads.github.com/repos/${repo}/releases/${release.id}/assets?name=${tarName}`,
-  {
-    method: 'POST',
-    headers: {
-      Authorization: `token ${token}`,
-      Accept: 'application/vnd.github+json',
-      'User-Agent': 'baby-dist-deploy',
-      'Content-Type': 'application/gzip',
+// 5. 上传双资产
+const assets = [
+  { name: tarName, type: 'application/gzip' },
+  { name: apkName, type: 'application/vnd.android.package-archive' },
+]
+for (const asset of assets) {
+  console.log(`▸ 上传 ${asset.name}…`)
+  const bytes = readFileSync(join(root, asset.name))
+  const uploadRes = await fetch(
+    `https://uploads.github.com/repos/${repo}/releases/${release.id}/assets?name=${asset.name}`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'baby-dist-deploy',
+        'Content-Type': asset.type,
+      },
+      body: bytes,
     },
-    body: bytes,
-  },
-)
-if (!uploadRes.ok) {
-  console.error('上传失败:', uploadRes.status, await uploadRes.text())
-  process.exit(1)
+  )
+  if (!uploadRes.ok) {
+    console.error('上传失败:', uploadRes.status, await uploadRes.text())
+    process.exit(1)
+  }
+  const uploaded = await uploadRes.json()
+  console.log(`  ${uploaded.name} (${statSync(join(root, asset.name)).size} bytes)`)
+  console.log(`  ${uploaded.browser_download_url}`)
 }
-const asset = await uploadRes.json()
-console.log(`  ${asset.name} (${statSync(join(root, tarName)).size} bytes)`)
-console.log(`  ${asset.browser_download_url}`)
-console.log('✓ 发版完成')
+console.log('✓ 发版完成（网页包 + APK 双资产）')
