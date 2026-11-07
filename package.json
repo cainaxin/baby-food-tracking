@@ -1,15 +1,22 @@
 {
   "name": "baby-food-tracker",
   "private": true,
-  "version": "0.7.5",
+  "version": "0.8.0",
   "type": "module",
   "scripts": {
     "dev": "node scripts/build-info.mjs && vite",
     "build": "node scripts/build-info.mjs && tsc -b && vite build",
+    "build:native": "node scripts/build-info.mjs && tsc -b && cross-env BUILD_NATIVE=1 vite build",
+    "android:sync": "node scripts/sync-android-version.mjs && npm run build:native && cap sync android",
+    "android:apk": "npm run android:sync && gradlew -p android assembleDebug",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/cli": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
     "@supabase/supabase-js": "^2.118.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
@@ -19,6 +26,7 @@
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^4.4.1",
+    "cross-env": "^10.1.0",
     "eslint": "^9.25.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.19",

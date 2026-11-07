@@ -1,8 +1,8 @@
 // 由 scripts/build-info.mjs 在 build/dev 前生成，请勿手改
 export const buildInfo = {
-  "version": "0.7.5",
-  "commit": "8c675e2",
-  "commitTime": "2026-11-05T23:29:49+08:00",
-  "buildTime": "2026-11-05T15:38:58.970Z",
-  "releaseNotes": "## v0.7.5\n\n成长曲线：今日虚线标记 + 缩放 + 月龄显示修正。\n\n### 功能\n\n- **今日虚线**：曲线上用橙色虚线标出「今天」的位置（月龄轴），一眼看出最近一条记录距今多久。\n- **缩放控制**：曲线支持「全部 / 近 6 月 / 近 3 月」三档缩放，数据多时也能看清细节。\n- **月龄修正**：底部改为显示**当前月龄**（而非最后记录日的月龄），并注明该数据记录于几月几日、当时几月龄。\n- **为什么**：最近没记录时看不出今天在哪；数据多时全部挤在一起看不清。"
+  "version": "0.8.0",
+  "commit": "0ed1d0b",
+  "commitTime": "2026-11-05T23:39:12+08:00",
+  "buildTime": "2026-11-07T08:00:21.843Z",
+  "releaseNotes": "## v0.8.0\n\n安卓 APK 安装包（Capacitor 原生壳），与网页版并行可用、数据同源。\n\n### 新增\n\n- **安卓 APK**：Capacitor 8 原生壳，`npm run android:apk` 一键构建 debug 安装包。包名 `com.babyday.tracker`，应用名「宝宝日记」，启动图标沿用 PWA 蓝白图标。\n- **返回键**：安卓系统返回键依次关闭弹层 → 回首页 → 退出 App，不会误退。\n- **数据同源**：APK 与网页版共用同一套 Supabase 云端数据，哪边记录全家都可见；本地模式数据各自独立（WebView 存储隔离）。\n- **为什么**：老人手机装浏览器 PWA 有门槛，直接装 APK 更稳，不依赖浏览器缓存与地址栏。\n\n### 与网页版的关系\n\n- 网页版（PWA / OpenWrt 部署）**不受影响**，继续走原有 `npm run build` 与发版流程。\n- 原生构建走 `BUILD_NATIVE=1`，**不注入 Service Worker**，避免 APK 更新后旧缓存挡住新界面。"
 } as const

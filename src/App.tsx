@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Capacitor } from '@capacitor/core'
+import { App as CapacitorApp } from '@capacitor/app'
 import type { Baby, BabyEvent, EventType } from './types'
 import {
   DIAPER_TAGS,
@@ -2402,6 +2404,33 @@ export default function App() {
     const t = window.setTimeout(() => setToast(''), 2200)
     return () => window.clearTimeout(t)
   }, [toast])
+
+  // 安卓返回键：先关弹层/确认框 → 再回首页 → 最后退出 App
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    let handle: { remove: () => Promise<void> } | undefined
+    void CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      if (sheet || savedConfirm) {
+        setSavedConfirm(null)
+        setSheet(null)
+        return
+      }
+      if (tab !== 'home') {
+        setTab('home')
+        return
+      }
+      if (canGoBack) {
+        window.history.back()
+        return
+      }
+      void CapacitorApp.exitApp()
+    }).then((h) => {
+      handle = h
+    })
+    return () => {
+      void handle?.remove()
+    }
+  }, [sheet, savedConfirm, tab])
 
   const baby = useMemo(() => {
     if (!data) return null

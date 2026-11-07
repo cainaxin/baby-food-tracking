@@ -8,9 +8,13 @@
 npm install
 npm run dev        # http://localhost:5173
 npm run dev -- --host 0.0.0.0 --port 5173   # 手机同局域网可访问（如 http://192.168.x.x:5173）
-npm run build      # tsc -b && vite build
+npm run build      # tsc -b && vite build（网页版，含 PWA / Service Worker）
 npm run preview    # 预览生产构建
 npm run lint       # eslint
+
+# —— 安卓 APK ——
+npm run android:apk   # 版本同步 → 原生构建（BUILD_NATIVE=1，无 SW）→ cap sync → assembleDebug
+# 产物：android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
 无单测框架时，以 `npm run build` + 手动点验为准。
@@ -22,6 +26,8 @@ npm run lint       # eslint
 - **登录**：邮箱密码；注册会创建家庭并生成邀请码；他人用邀请码加入。
 - **领域模型**：`baby`（多宝宝）与 `event`（milk / solid / sleep / wake / outing / bath_swim）。吃奶带 `amount_ml`；睡觉、外出可有 `end_at`。
 - **UI 不直连 Supabase**：一律通过 `backend.ts`，避免界面绑死后端。
+- **安卓壳**：Capacitor 8（`capacitor.config.ts` + `android/`）。包名 `com.babyday.tracker`。**原生构建必须走 `BUILD_NATIVE=1`**（不注入 Service Worker），否则 APK 更新后旧 SW 缓存会挡住新界面。网页版构建（`npm run build`）照常带 PWA，两者互不影响。
+- **安卓返回键**：关弹层 → 回首页 → 退出（`src/App.tsx` 中 `backButton` 监听）。
 
 ## Conventions
 
@@ -51,4 +57,5 @@ npm run lint       # eslint
 3. 时间线编辑 / 删除可用  
 4. 窄屏（375px）无横向滚动，底部快捷按钮可点  
 5. 配置 Supabase 后：两账号同家庭、一人记录另一人刷新可见  
+6. 安卓：`npm run android:apk` 产出 APK，包名/版本号正确，内含 `assets/public/index.html`、无 `sw.js`
 
