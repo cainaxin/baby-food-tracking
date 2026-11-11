@@ -22,8 +22,12 @@ import {
   ensureFamily,
   isCloudConfigured,
   joinFamilyByInvite,
+  loadCachedData,
   loadData,
+  removeBabyFromCache,
+  removeEventFromCache,
   saveEvent,
+  setCurrentBabyInCache,
   signIn,
   signOut,
   signUp,
@@ -2336,7 +2340,7 @@ export default function App() {
   const pendingDeletesRef = useRef<Set<string>>(new Set())
 
   const refresh = useCallback(async () => {
-    const next = await loadData()
+    const next = await loadData({ incremental: true })
     setData((prev) => {
       if (!prev) return next
       const keptBabyId =
@@ -2357,15 +2361,48 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    void refresh().finally(() => setBooting(false))
+    // 有本地缓存就先渲染（秒开），后台再增量同步；没有则等首个完整加载
+    const cached = loadCachedData()
+    if (cached) {
+      setData(cached)
+      setBooting(false)
+      void refresh()
+    } else {
+      void refresh().finally(() => setBooting(false))
+    }
   }, [refresh])
 
   const familyId = data?.user?.familyId ?? null
   useEffect(() => {
     if (!familyId || familyId === 'local-family') return
     let timer: number | null = null
-    const unsub = subscribeFamily(familyId, () => {
-      // 合并短时间内的多次变更，避免刷太猛
+    const unsub = subscribeFamily(familyId, (info) => {
+      // 删除：立刻从界面和缓存里拿掉，不等网络刷新
+      if (info?.action === 'DELETE' && info.id) {
+        if (info.table === 'event') {
+          pendingDeletesRef.current.add(info.id)
+          pendingEventsRef.current.delete(info.id)
+          removeEventFromCache(info.id)
+          setData((prev) =>
+            prev
+              ? { ...prev, events: prev.events.filter((e) => e.id !== info.id) }
+              : prev,
+          )
+        } else {
+          removeBabyFromCache(info.id)
+          setData((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  babies: prev.babies.filter((b) => b.id !== info.id),
+                  events: prev.events.filter((e) => e.babyId !== info.id),
+                }
+              : prev,
+          )
+        }
+        return
+      }
+      // 增改：合并短时间内的多次变更，避免刷太猛
       if (timer) window.clearTimeout(timer)
       timer = window.setTimeout(() => {
         void refresh()
@@ -3402,6 +3439,7 @@ export default function App() {
                   className="list-row"
                   onClick={() => {
                     setData((prev) => (prev ? { ...prev, currentBabyId: b.id } : prev))
+                    setCurrentBabyInCache(b.id)
                     setSheet(null)
                   }}
                 >

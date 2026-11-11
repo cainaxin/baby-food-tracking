@@ -2,6 +2,18 @@ import type { Baby, BabyEvent, EventType, GrowthRecord } from '../types'
 import { emptyStore, loadStore, saveStore, uid, type AppStore } from './store'
 import { nowIso } from './time'
 import { isCloudConfigured, supabase } from './supabase'
+import {
+  clearSnapshot,
+  dropDeletedBabies,
+  dropDeletedEvents,
+  readSnapshot,
+  removeSnapshotBaby,
+  removeSnapshotEvent,
+  saveSnapshot,
+  upsertSnapshotBaby,
+  upsertSnapshotEvent,
+  type CloudSnapshot,
+} from './cache'
 
 export { isCloudConfigured }
 
@@ -24,6 +36,17 @@ export type AppData = {
   avatarUrl?: string | null
 }
 
+/** 身份信息缓存：每次 refresh 都查 auth + family_member + family 太慢 */
+let sessionCache: { user: SessionUser | null; ts: number } | null = null
+const SESSION_TTL = 60_000
+
+export function invalidateSessionCache(): void {
+  sessionCache = null
+}
+
+/** 定期全量兜底（捕捉时钟偏差 / 窗口外异常，删除已由增量 id 对比覆盖） */
+const FULL_RESYNC_MS = 30 * 60 * 1000
+
 /** 本地模式下的假用户，保证未配置云时仍可使用 */
 function localUser(store: AppStore): SessionUser {
   return {
@@ -45,6 +68,7 @@ type BabyRow = {
   weight_kg?: number | null
   height_cm?: number | null
   created_at: string
+  updated_at?: string | null
 }
 
 type EventRow = {
@@ -58,6 +82,7 @@ type EventRow = {
   photo_url?: string | null
   created_by?: string | null
   created_at: string
+  updated_at?: string | null
 }
 
 function mapBaby(row: BabyRow): Baby {
@@ -89,11 +114,17 @@ function mapEvent(row: EventRow): BabyEvent {
   }
 }
 
-export async function getSessionUser(): Promise<SessionUser | null> {
+export async function getSessionUser(opts?: { fresh?: boolean }): Promise<SessionUser | null> {
   if (!supabase) return null
+  if (!opts?.fresh && sessionCache && Date.now() - sessionCache.ts < SESSION_TTL) {
+    return sessionCache.user
+  }
   const { data } = await supabase.auth.getUser()
   const user = data.user
-  if (!user) return null
+  if (!user) {
+    sessionCache = { user: null, ts: Date.now() }
+    return null
+  }
 
   // 可能存在历史多条成员记录（自动建家后又加入共享家庭），取最新一条
   const { data: members, error: memErr } = await supabase
@@ -117,7 +148,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     invite = family?.invite_code ?? null
   }
 
-  return {
+  const result: SessionUser = {
     id: user.id,
     email: user.email ?? '',
     displayName: member?.display_name || user.email?.split('@')[0] || '家人',
@@ -125,6 +156,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     familyId: member?.family_id ?? null,
     inviteCode: invite,
   }
+  sessionCache = { user: result, ts: Date.now() }
+  return result
 }
 
 export async function signUp(
@@ -168,11 +201,14 @@ export async function signIn(
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) return { user: null, error: error.message }
   if (!data.user) return { user: null, error: '登录失败' }
-  const user = await getSessionUser()
+  invalidateSessionCache()
+  const user = await getSessionUser({ fresh: true })
   return { user }
 }
 
 export async function signOut(): Promise<void> {
+  clearSnapshot()
+  invalidateSessionCache()
   if (supabase) await supabase.auth.signOut()
 }
 
@@ -188,6 +224,7 @@ export async function ensureFamily(displayName?: string): Promise<{ error?: stri
     p_display_name: displayName || user.displayName || '家人',
   })
   if (error) return { error: error.message }
+  invalidateSessionCache()
   return {}
 }
 
@@ -209,6 +246,7 @@ export async function joinFamilyByInvite(
   }
   const familyId = (data as { family_id?: string } | null)?.family_id
   if (!familyId) return { error: '邀请码无效，请向家人确认' }
+  invalidateSessionCache()
   return {}
 }
 
@@ -268,6 +306,19 @@ export async function updateProfile(input: {
       return { warning: '头像已本地保存，云端同步失败' }
     }
   }
+  // 资料变了：清身份缓存，并同步快照里的用户信息
+  invalidateSessionCache()
+  const snap = readSnapshot()
+  if (snap) {
+    saveSnapshot({
+      ...snap,
+      user: {
+        ...snap.user,
+        displayName: input.displayName ?? snap.user.displayName,
+        avatarUrl: avatarUrl !== undefined ? avatarUrl : snap.user.avatarUrl,
+      },
+    })
+  }
   return {}
 }
 
@@ -275,22 +326,240 @@ export async function updateDisplayName(displayName: string): Promise<{ error?: 
   return updateProfile({ displayName })
 }
 
-export async function loadData(): Promise<AppData> {
-  if (!supabase) {
-    const store = loadStore()
-    return {
-      mode: 'local',
-      user: localUser(store),
-      babies: store.babies,
-      events: store.events,
-      currentBabyId: store.currentBabyId,
-      displayName: store.profile.displayName,
-      avatarUrl: store.profile.avatarUrl ?? null,
-    }
+/** 快照 → AppData */
+function snapshotToAppData(
+  snap: CloudSnapshot,
+  user: SessionUser,
+  localProfile: { displayName: string; avatarUrl?: string | null },
+): AppData {
+  return {
+    mode: 'cloud',
+    user,
+    babies: snap.babies,
+    events: snap.events,
+    currentBabyId: snap.currentBabyId,
+    displayName: user.displayName,
+    avatarUrl: user.avatarUrl ?? localProfile.avatarUrl ?? null,
+  }
+}
+
+/** 本地模式数据 */
+function localAppData(store: AppStore): AppData {
+  return {
+    mode: 'local',
+    user: localUser(store),
+    babies: store.babies,
+    events: store.events,
+    currentBabyId: store.currentBabyId,
+    displayName: store.profile.displayName,
+    avatarUrl: store.profile.avatarUrl ?? null,
+  }
+}
+
+/**
+ * 全量拉取（登录后首次 / 定期兜底），写快照。
+ * 全量结果 = 服务端真相：保留同账号墓碑（防并发写回），其余旧墓碑丢弃。
+ */
+async function fullSync(user: SessionUser): Promise<AppData> {
+  const localProfile = loadStore().profile
+  const client = supabase!
+  const [babiesRes, eventsRes] = await Promise.all([
+    client
+      .from('baby')
+      // 用 * 全字段查询：数据库缺列时 select 列表报错会导致宝宝列表整个消失
+      .select('*')
+      .eq('family_id', user.familyId!)
+      .order('created_at', { ascending: true }),
+    client
+      .from('event')
+      .select('*')
+      .eq('family_id', user.familyId!)
+      .order('start_at', { ascending: false })
+      .limit(500),
+  ])
+  const babyRows = (babiesRes.data ?? []) as BabyRow[]
+  const eventRows = (eventsRes.data ?? []) as EventRow[]
+
+  const prev = readSnapshot()
+  const sameAccount = prev && prev.user.id === user.id && prev.user.familyId === user.familyId
+  const tombstones = sameAccount
+    ? pickRecentTombstones(prev!.tombstones, 60_000)
+    : undefined
+
+  const babies = dropDeletedBabies(babyRows.map(mapBaby), tombstones)
+  const events = dropDeletedEvents(eventRows.map(mapEvent), tombstones)
+  const currentBabyId = babies[0]?.id ?? null
+
+  const snap: CloudSnapshot = {
+    user: {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl ?? null,
+      familyId: user.familyId!,
+      inviteCode: user.inviteCode ?? null,
+    },
+    babies,
+    events,
+    currentBabyId,
+    babyCursor: maxCursor(babyRows),
+    eventCursor: maxCursor(eventRows),
+    savedAt: Date.now(),
+    lastFullAt: Date.now(),
+    tombstones,
+  }
+  saveSnapshot(snap)
+  return snapshotToAppData(snap, user, localProfile)
+}
+
+/** 找出 updated_at 最大值（游标）。行里没有 updated_at 时跳过。 */
+function maxCursor<T extends { updated_at?: string | null }>(rows: T[]): string {
+  let max = ''
+  for (const r of rows) {
+    const u = r.updated_at
+    if (u && u > max) max = u
+  }
+  return max
+}
+
+/**
+ * 增量拉取：只拉 updated_at > 游标的行（真增量，数据量小）。
+ * 删除靠 Realtime DELETE 即时处理 + 墓碑防写回 + 定期全量兜底。
+ */
+async function incrementalSync(user: SessionUser, snap: CloudSnapshot): Promise<AppData> {
+  const localProfile = loadStore().profile
+  const client = supabase!
+  const familyId = user.familyId!
+  // 重叠 3 秒：吸收时钟偏差，避免边界行漏掉
+  const babySince = snap.babyCursor ? new Date(new Date(snap.babyCursor).getTime() - 3000).toISOString() : null
+  const eventSince = snap.eventCursor ? new Date(new Date(snap.eventCursor).getTime() - 3000).toISOString() : null
+
+  const [babyRes, eventRes] = await Promise.all([
+    babySince
+      ? client
+          .from('baby')
+          .select('*')
+          .eq('family_id', familyId)
+          .gt('updated_at', babySince)
+          .order('updated_at', { ascending: true })
+      : client.from('baby').select('*').eq('family_id', familyId).order('created_at', { ascending: true }),
+    eventSince
+      ? client
+          .from('event')
+          .select('*')
+          .eq('family_id', familyId)
+          .gt('updated_at', eventSince)
+          .order('updated_at', { ascending: true })
+      : client
+          .from('event')
+          .select('*')
+          .eq('family_id', familyId)
+          .order('start_at', { ascending: false })
+          .limit(500),
+  ])
+
+  // 游标列缺失（旧库无 updated_at）→ 降级全量
+  if (babyRes.error || eventRes.error) return fullSync(user)
+
+  const babyRows = (babyRes.data ?? []) as BabyRow[]
+  const eventRows = (eventRes.data ?? []) as EventRow[]
+
+  // 宝宝：upsert 合并（跳过墓碑，防止并发写回）
+  let babies = snap.babies
+  for (const b of dropDeletedBabies(babyRows.map(mapBaby), snap.tombstones)) {
+    babies = babies.some((x) => x.id === b.id)
+      ? babies.map((x) => (x.id === b.id ? b : x))
+      : [...babies, b]
   }
 
-  const user = await getSessionUser()
+  // 事件：upsert 合并 + 按时间排序取最新 500
+  let events = snap.events
+  for (const e of dropDeletedEvents(eventRows.map(mapEvent), snap.tombstones)) {
+    events = events.some((x) => x.id === e.id)
+      ? events.map((x) => (x.id === e.id ? e : x))
+      : [...events, e]
+  }
+  events = [...events].sort((a, b) => b.startAt.localeCompare(a.startAt)).slice(0, 500)
+
+  const currentBabyId =
+    snap.currentBabyId && babies.some((b) => b.id === snap.currentBabyId)
+      ? snap.currentBabyId
+      : babies[0]?.id ?? null
+
+  const nextSnap: CloudSnapshot = {
+    ...snap,
+    user: {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl ?? null,
+      familyId: user.familyId!,
+      inviteCode: user.inviteCode ?? null,
+    },
+    babies,
+    events,
+    currentBabyId,
+    babyCursor: maxCursor(babyRows) || snap.babyCursor,
+    eventCursor: maxCursor(eventRows) || snap.eventCursor,
+    savedAt: Date.now(),
+    lastFullAt: snap.lastFullAt,
+    tombstones: pruneTombstonesLocal(snap.tombstones),
+  }
+  saveSnapshot(nextSnap)
+  return snapshotToAppData(nextSnap, user, localProfile)
+}
+
+function pruneTombstonesLocal(map: Record<string, number> | undefined): Record<string, number> | undefined {
+  if (!map) return undefined
+  const now = Date.now()
+  const out: Record<string, number> = {}
+  for (const [id, ts] of Object.entries(map)) {
+    if (now - ts < TOMBSTONE_TTL_MS) out[id] = ts
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
+function pickRecentTombstones(
+  map: Record<string, number> | undefined,
+  withinMs: number,
+): Record<string, number> | undefined {
+  if (!map) return undefined
+  const now = Date.now()
+  const out: Record<string, number> = {}
+  for (const [id, ts] of Object.entries(map)) {
+    if (now - ts < withinMs) out[id] = ts
+  }
+  return Object.keys(out).length ? out : undefined
+}
+
+const TOMBSTONE_TTL_MS = 15 * 60 * 1000
+
+/** 启动秒开：有快照就直接返回，不等网络 */
+export function loadCachedData(): AppData | null {
+  if (!supabase) return localAppData(loadStore())
+  const snap = readSnapshot()
+  if (!snap) return null
+  return snapshotToAppData(snap, sessionUserFromSnapshot(snap), loadStore().profile)
+}
+
+export async function loadData(opts?: { incremental?: boolean }): Promise<AppData> {
+  if (!supabase) {
+    const store = loadStore()
+    return localAppData(store)
+  }
+
   const localProfile = loadStore().profile
+  const snap = readSnapshot()
+
+  let user: SessionUser | null = null
+  try {
+    user = await getSessionUser()
+  } catch {
+    // 网络拿不到身份：有快照就先用，别让界面空掉
+    if (snap) return snapshotToAppData(snap, sessionUserFromSnapshot(snap), localProfile)
+    return localAppData(loadStore())
+  }
+
   if (!user?.familyId) {
     return {
       mode: 'cloud',
@@ -303,34 +572,71 @@ export async function loadData(): Promise<AppData> {
     }
   }
 
-  const [babiesRes, eventsRes] = await Promise.all([
-    supabase
-      .from('baby')
-      // 用 * 全字段查询：数据库缺列时 select 列表报错会导致宝宝列表整个消失
-      .select('*')
-      .eq('family_id', user.familyId)
-      .order('created_at', { ascending: true }),
-    supabase
-      .from('event')
-      .select('*')
-      .eq('family_id', user.familyId)
-      .order('start_at', { ascending: false })
-      .limit(500),
-  ])
+  // 增量模式 + 有快照 + 同账号同家庭 + 没过期 → 只拉变化的行
+  const sameAccount =
+    snap && snap.user.id === user.id && snap.user.familyId === user.familyId
+  const stale = !snap || Date.now() - snap.lastFullAt > FULL_RESYNC_MS
 
-  const babies = (babiesRes.data ?? []).map(mapBaby)
-  const events = (eventsRes.data ?? []).map(mapEvent)
-  const currentBabyId = babies[0]?.id ?? null
-
-  return {
-    mode: 'cloud',
-    user,
-    babies,
-    events,
-    currentBabyId,
-    displayName: user.displayName,
-    avatarUrl: user.avatarUrl ?? localProfile.avatarUrl ?? null,
+  // 网络失败时回退缓存，不让空数据覆盖快照
+  try {
+    if (opts?.incremental && sameAccount && !stale) {
+      return await incrementalSync(user, snap)
+    }
+    return await fullSync(user)
+  } catch {
+    if (snap && sameAccount) {
+      return snapshotToAppData(snap, user, localProfile)
+    }
+    // 无缓存兜底：返回空的云端结构（同旧行为），界面落到登录页，不抛异常
+    return {
+      mode: 'cloud',
+      user,
+      babies: [],
+      events: [],
+      currentBabyId: null,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl ?? localProfile.avatarUrl ?? null,
+    }
   }
+}
+
+function sessionUserFromSnapshot(snap: CloudSnapshot): SessionUser {
+  return {
+    id: snap.user.id,
+    email: snap.user.email,
+    displayName: snap.user.displayName,
+    avatarUrl: snap.user.avatarUrl,
+    familyId: snap.user.familyId,
+    inviteCode: snap.user.inviteCode,
+  }
+}
+
+/** 写穿：事件保存后立即更新快照，下次秒开就是最新的 */
+export function persistEventToCache(ev: BabyEvent): void {
+  upsertSnapshotEvent(ev)
+}
+
+export function persistBabyToCache(b: Baby): void {
+  upsertSnapshotBaby(b)
+}
+
+export function removeEventFromCache(id: string): void {
+  removeSnapshotEvent(id)
+}
+
+export function removeBabyFromCache(id: string): void {
+  removeSnapshotBaby(id)
+}
+
+export function setCurrentBabyInCache(babyId: string | null): void {
+  const snap = readSnapshot()
+  if (!snap) return
+  saveSnapshot({ ...snap, currentBabyId: babyId })
+}
+
+export function clearUserCache(): void {
+  clearSnapshot()
+  invalidateSessionCache()
 }
 
 async function localPatch(fn: (store: AppStore) => AppStore): Promise<void> {
@@ -409,7 +715,9 @@ export async function addBaby(input: {
     }
     return { error: error.message }
   }
-  return { baby: mapBaby(data) }
+  const baby = mapBaby(data)
+  persistBabyToCache(baby)
+  return { baby }
 }
 
 export async function updateBaby(
@@ -493,7 +801,9 @@ export async function updateBaby(
     }
     return { error: error.message }
   }
-  return { baby: mapBaby(data) }
+  const updated = mapBaby(data)
+  persistBabyToCache(updated)
+  return { baby: updated }
 }
 
 export async function deleteBaby(id: string): Promise<{ error?: string }> {
@@ -507,6 +817,7 @@ export async function deleteBaby(id: string): Promise<{ error?: string }> {
         currentBabyId: babies[0]?.id ?? null,
       }
     })
+    removeBabyFromCache(id)
     return {}
   }
   const user = await getSessionUser()
@@ -516,7 +827,9 @@ export async function deleteBaby(id: string): Promise<{ error?: string }> {
     .delete()
     .eq('id', id)
     .eq('family_id', user.familyId)
-  return error ? { error: error.message } : {}
+  if (error) return { error: error.message }
+  removeBabyFromCache(id)
+  return {}
 }
 
 export async function saveEvent(
@@ -570,6 +883,7 @@ export async function saveEvent(
       createdAt: nowIso(),
     }
     await localPatch((s) => ({ ...s, events: [ev, ...s.events] }))
+    persistEventToCache(ev)
     return { event: ev }
   }
 
@@ -619,7 +933,9 @@ export async function saveEvent(
     }
     return { error: error.message }
   }
-  return { event: mapEvent(data) }
+  const saved = mapEvent(data)
+  persistEventToCache(saved)
+  return { event: saved }
 }
 
 export async function deleteEvent(id: string): Promise<{ error?: string }> {
@@ -634,7 +950,9 @@ export async function deleteEvent(id: string): Promise<{ error?: string }> {
     .delete()
     .eq('id', id)
     .eq('family_id', user.familyId)
-  return error ? { error: error.message } : {}
+  if (error) return { error: error.message }
+  removeEventFromCache(id)
+  return {}
 }
 
 export async function uploadAvatar(
@@ -661,21 +979,33 @@ export async function uploadAvatar(
 
 export function subscribeFamily(
   familyId: string,
-  onChange: () => void,
+  onChange: (info?: { table: 'event' | 'baby'; action: 'INSERT' | 'UPDATE' | 'DELETE'; id?: string }) => void,
 ): () => void {
   const client = supabase
   if (!client || familyId === 'local-family') return () => {}
+  const handle =
+    (table: 'event' | 'baby') =>
+    (payload: { eventType: string; new?: Record<string, unknown> | null; old?: Record<string, unknown> | null }) => {
+      const id = (payload.old?.id ?? payload.new?.id) as string | undefined
+      onChange({
+        table,
+        action: (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE' || payload.eventType === 'DELETE'
+          ? payload.eventType
+          : 'UPDATE') as 'INSERT' | 'UPDATE' | 'DELETE',
+        id,
+      })
+    }
   const channel = client
     .channel(`family-${familyId}`)
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'event', filter: `family_id=eq.${familyId}` },
-      () => onChange(),
+      handle('event'),
     )
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'baby', filter: `family_id=eq.${familyId}` },
-      () => onChange(),
+      handle('baby'),
     )
     .subscribe((status) => {
       // 连上后先拉一次，避免订阅成功前已有更新
