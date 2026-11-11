@@ -69,25 +69,55 @@ const headers = {
   'Content-Type': 'application/json; charset=utf-8',
 }
 
-// 4. 创建 Release（body 用 UTF-8 字节，中文才不会变问号）
-console.log(`▸ 创建 Release ${tag}…`)
-const releaseBody = JSON.stringify({
-  tag_name: tag,
-  target_commitish: 'main',
-  name: tag,
-  body: description || tag,
-})
-const releaseRes = await fetch(`https://api.github.com/repos/${repo}/releases`, {
-  method: 'POST',
-  headers,
-  body: new TextEncoder().encode(releaseBody),
-})
-if (!releaseRes.ok) {
-  console.error('创建 Release 失败:', releaseRes.status, await releaseRes.text())
-  process.exit(1)
+// 4. 创建/更新 Release（body 用 UTF-8 字节，中文才不会变问号）
+// tag 重复跑脚本时先取已有 Release，避免 422 already_exists
+console.log(`▸ 获取/创建 Release ${tag}…`)
+let release = null
+const getRes = await fetch(`https://api.github.com/repos/${repo}/releases/tags/${tag}`, { headers })
+if (getRes.ok) {
+  release = await getRes.json()
+  console.log(`  已存在 release_id=${release.id}，更新描述`)
+  const upd = await fetch(`https://api.github.com/repos/${repo}/releases/${release.id}`, {
+    method: 'PATCH',
+    headers,
+    body: new TextEncoder().encode(JSON.stringify({ body: description || tag })),
+  })
+  if (!upd.ok) {
+    console.error('更新 Release 失败:', upd.status, await upd.text())
+    process.exit(1)
+  }
+} else {
+  const releaseBody = JSON.stringify({
+    tag_name: tag,
+    target_commitish: 'main',
+    name: tag,
+    body: description || tag,
+  })
+  const releaseRes = await fetch(`https://api.github.com/repos/${repo}/releases`, {
+    method: 'POST',
+    headers,
+    body: new TextEncoder().encode(releaseBody),
+  })
+  if (!releaseRes.ok) {
+    console.error('创建 Release 失败:', releaseRes.status, await releaseRes.text())
+    process.exit(1)
+  }
+  release = await releaseRes.json()
 }
-const release = await releaseRes.json()
 console.log(`  release_id=${release.id}`)
+
+// 删除已有同名资产，避免重复上传冲突
+const listRes = await fetch(`https://api.github.com/repos/${repo}/releases/${release.id}/assets`, { headers })
+const existing = listRes.ok ? await listRes.json() : []
+for (const a of existing) {
+  if ([tarName, apkName].includes(a.name)) {
+    console.log(`  删除旧资产 ${a.name}`)
+    await fetch(`https://api.github.com/repos/${repo}/releases/assets/${a.id}`, {
+      method: 'DELETE',
+      headers,
+    })
+  }
+}
 
 // 5. 上传双资产
 const assets = [
