@@ -174,3 +174,41 @@ create policy avatar_insert on storage.objects
 
 create policy avatar_update on storage.objects
   for update using (bucket_id = 'avatars');
+
+-- 反馈与建议（家人提交，主账号在 App 内查看）
+create table if not exists feedback (
+  id uuid primary key default gen_random_uuid(),
+  family_id uuid not null references family(id) on delete cascade,
+  content text not null,
+  contact text,
+  created_by text,
+  status text not null default 'pending' check (status in ('pending','done')),
+  created_at timestamptz not null default now()
+);
+
+alter table feedback enable row level security;
+
+-- 开发者判定：按主账号邮箱识别（先建函数，策略才可用）
+create or replace function is_developer()
+returns boolean
+language sql
+security definer
+stable
+as $$
+  select lower(coalesce(
+    (select email from auth.users where id = auth.uid()),
+    ''
+  )) = '1252568105@qq.com';
+$$;
+
+grant execute on function is_developer() to authenticated;
+
+create policy feedback_insert on feedback
+  for insert with check (is_family_member(family_id));
+
+create policy feedback_select on feedback
+  for select using (is_developer());
+
+create policy feedback_update on feedback
+  for update using (is_developer())
+  with check (is_developer());

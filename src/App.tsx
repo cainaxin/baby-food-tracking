@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { App as CapacitorApp } from '@capacitor/app'
-import type { Baby, BabyEvent, EventType } from './types'
+import type { Baby, BabyEvent, EventType, FeedbackItem } from './types'
 import {
   DIAPER_TAGS,
   EVENT_META,
@@ -10,7 +10,15 @@ import {
 import { loadSolidTypes, saveSolidTypes } from './lib/solidTypes'
 import { compressImage } from './lib/photo'
 import { fetchDailySummary, askDailyQuestion, type DailySummary } from './lib/summary'
-import { saveDailySummary, saveGrowthRecord, deleteGrowthRecord, updateProfile } from './lib/backend'
+import {
+  saveDailySummary,
+  saveGrowthRecord,
+  deleteGrowthRecord,
+  updateProfile,
+  submitFeedback,
+  getFeedbacks,
+  updateFeedbackStatus,
+} from './lib/backend'
 import { getWhoPercentiles, getPercentileZone } from './lib/whoGrowth'
 import { loadGrowthCached, invalidateGrowthCache } from './lib/growthCache'
 import type { GrowthRecord } from './types'
@@ -66,6 +74,8 @@ type Sheet =
   | { kind: 'switch' }
   | { kind: 'join' }
   | { kind: 'typePicker' }
+  | { kind: 'feedback' }
+  | { kind: 'feedbackList' }
   | null
 
 /** 保存成功后的确认弹窗数据（展示刚写入的记录，可撤销重编辑） */
@@ -1434,6 +1444,187 @@ function JoinSheet({
         >
           {loading ? '加入中…' : '加入'}
         </button>
+      </div>
+    </div>
+  )
+}
+
+function FeedbackSheet({
+  onCancel,
+  onSubmitted,
+}: {
+  onCancel: () => void
+  onSubmitted: () => void
+}) {
+  const [content, setContent] = useState('')
+  const [contact, setContact] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  return (
+    <div className="sheet-backdrop" onClick={onCancel}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" />
+        <div className="row-between">
+          <h2 className="sheet-title">反馈与建议</h2>
+          <button className="btn-ghost" onClick={onCancel}>
+            取消
+          </button>
+        </div>
+        <div className="muted small" style={{ marginTop: 6 }}>
+          用起来有什么不方便？告诉我们，开发者会看每一条建议。
+        </div>
+        <div className="field" style={{ marginTop: 12 }}>
+          <label>想说的话</label>
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="比如：某个按钮不好找、想加个功能……"
+            rows={5}
+            style={{ resize: 'vertical', minHeight: 100 }}
+          />
+        </div>
+        <div className="field">
+          <label>联系方式（可选）</label>
+          <input
+            value={contact}
+            onChange={(e) => setContact(e.target.value)}
+            placeholder="比如：手机号 / 微信，方便回复你"
+          />
+        </div>
+        {error && (
+          <div className="danger-text small" style={{ marginTop: 10 }}>
+            {error}
+          </div>
+        )}
+        <button
+          type="button"
+          className="btn btn-primary"
+          style={{ marginTop: 18 }}
+          disabled={loading || !content.trim()}
+          onClick={async () => {
+            setLoading(true)
+            setError('')
+            const { error: err } = await submitFeedback({
+              content: content.trim(),
+              contact: contact.trim(),
+            })
+            setLoading(false)
+            if (err) setError(err)
+            else onSubmitted()
+          }}
+        >
+          {loading ? '提交中…' : '提交'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function FeedbackListSheet({
+  onCancel,
+  onToast,
+}: {
+  onCancel: () => void
+  onToast: (msg: string) => void
+}) {
+  const [items, setItems] = useState<FeedbackItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      setLoading(true)
+      const { items: list, error: err } = await getFeedbacks()
+      if (cancelled) return
+      if (err) setError(err)
+      else setItems(list ?? [])
+      setLoading(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const toggleStatus = async (item: FeedbackItem) => {
+    const next = item.status === 'done' ? 'pending' : 'done'
+    const { error: err } = await updateFeedbackStatus(item.id, next)
+    if (err) {
+      onToast(err)
+      return
+    }
+    setItems((prev) =>
+      prev.map((i) => (i.id === item.id ? { ...i, status: next } : i)),
+    )
+    onToast(next === 'done' ? '已标记为已处理' : '已标记为待处理')
+  }
+
+  return (
+    <div className="sheet-backdrop" onClick={onCancel}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '80vh' }}>
+        <div className="sheet-handle" />
+        <div className="row-between">
+          <h2 className="sheet-title">反馈记录</h2>
+          <button className="btn-ghost" onClick={onCancel}>
+            关闭
+          </button>
+        </div>
+        <div className="muted small" style={{ marginTop: 6 }}>
+          家人提的建议都在这里，点一下可标记已处理。
+        </div>
+        <div style={{ marginTop: 12, overflowY: 'auto', maxHeight: '60vh' }}>
+          {loading ? (
+            <div className="muted small" style={{ textAlign: 'center', padding: 20 }}>
+              加载中…
+            </div>
+          ) : error ? (
+            <div className="danger-text small" style={{ textAlign: 'center', padding: 20 }}>
+              {error}
+            </div>
+          ) : items.length === 0 ? (
+            <div className="muted small" style={{ textAlign: 'center', padding: 20 }}>
+              还没有反馈
+            </div>
+          ) : (
+            <div className="card">
+              {items.map((item) => (
+                <div
+                  key={item.id}
+                  style={{
+                    padding: '12px 14px',
+                    borderBottom: '1px solid var(--fill)',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => toggleStatus(item)}
+                >
+                  <div className="row-between">
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{item.createdBy || '家人'}</div>
+                    <div
+                      className="pill"
+                      style={{
+                        background: item.status === 'done' ? '#E8F5E9' : '#FFF3E0',
+                        color: item.status === 'done' ? '#2E7D32' : '#E65100',
+                        fontSize: 11,
+                      }}
+                    >
+                      {item.status === 'done' ? '已处理' : '待处理'}
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 15, lineHeight: 1.6 }}>{item.content}</div>
+                  {item.contact && (
+                    <div className="muted small" style={{ marginTop: 4 }}>
+                      联系方式：{item.contact}
+                    </div>
+                  )}
+                  <div className="muted small" style={{ marginTop: 4 }}>
+                    {formatAboutTime(item.createdAt)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -3218,6 +3409,30 @@ export default function App() {
               <button
                 type="button"
                 className="list-row"
+                onClick={() => setSheet({ kind: 'feedback' })}
+              >
+                <div>
+                  <div style={{ fontWeight: 600 }}>反馈与建议</div>
+                  <div className="muted small">用起来不方便？告诉我们</div>
+                </div>
+                <div className="muted">›</div>
+              </button>
+              {data.mode === 'cloud' && data.user?.email?.toLowerCase() === '1252568105@qq.com' && (
+                <button
+                  type="button"
+                  className="list-row"
+                  onClick={() => setSheet({ kind: 'feedbackList' })}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600 }}>反馈记录（开发者）</div>
+                    <div className="muted small">查看家人提的建议</div>
+                  </div>
+                  <div className="muted">›</div>
+                </button>
+              )}
+              <button
+                type="button"
+                className="list-row"
                 onClick={() => {
                   try {
                     const events = data?.events ?? []
@@ -3555,6 +3770,23 @@ export default function App() {
             await refresh()
             setToast('已加入家庭')
           }}
+        />
+      )}
+
+      {sheet?.kind === 'feedback' && (
+        <FeedbackSheet
+          onCancel={() => setSheet(null)}
+          onSubmitted={() => {
+            setSheet(null)
+            setToast('感谢反馈，开发者会看到的')
+          }}
+        />
+      )}
+
+      {sheet?.kind === 'feedbackList' && (
+        <FeedbackListSheet
+          onCancel={() => setSheet(null)}
+          onToast={setToast}
         />
       )}
 

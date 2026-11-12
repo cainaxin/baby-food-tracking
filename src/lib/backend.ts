@@ -1,4 +1,4 @@
-import type { Baby, BabyEvent, EventType, GrowthRecord } from '../types'
+import type { Baby, BabyEvent, EventType, GrowthRecord, FeedbackItem } from '../types'
 import { emptyStore, loadStore, saveStore, uid, type AppStore } from './store'
 import { nowIso } from './time'
 import { isCloudConfigured, supabase } from './supabase'
@@ -1228,6 +1228,66 @@ export async function deleteGrowthRecord(id: string): Promise<{ error?: string }
     .delete()
     .eq('id', id)
     .eq('family_id', user.familyId)
+  return error ? { error: error.message } : {}
+}
+
+// ===== 反馈与建议 =====
+
+type FeedbackRow = {
+  id: string
+  content: string
+  contact?: string | null
+  created_by?: string | null
+  status: string
+  created_at: string
+}
+
+function mapFeedback(row: FeedbackRow): FeedbackItem {
+  return {
+    id: row.id,
+    content: row.content,
+    contact: row.contact ?? null,
+    createdBy: row.created_by ?? '',
+    status: row.status === 'done' ? 'done' : 'pending',
+    createdAt: row.created_at,
+  }
+}
+
+export async function submitFeedback(input: {
+  content: string
+  contact?: string
+}): Promise<{ error?: string }> {
+  if (!supabase) return { error: '未配置云端，反馈功能暂不可用' }
+  const user = await getSessionUser()
+  if (!user?.familyId) return { error: '未加入家庭' }
+  const { error } = await supabase.from('feedback').insert({
+    family_id: user.familyId,
+    content: input.content,
+    contact: input.contact || null,
+    created_by: user.displayName,
+  })
+  return error ? { error: error.message } : {}
+}
+
+export async function getFeedbacks(): Promise<{
+  items?: FeedbackItem[]
+  error?: string
+}> {
+  if (!supabase) return { error: '未配置云端' }
+  const { data, error } = await supabase
+    .from('feedback')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) return { error: error.message }
+  return { items: (data ?? []).map(mapFeedback) }
+}
+
+export async function updateFeedbackStatus(
+  id: string,
+  status: 'pending' | 'done',
+): Promise<{ error?: string }> {
+  if (!supabase) return { error: '未配置云端' }
+  const { error } = await supabase.from('feedback').update({ status }).eq('id', id)
   return error ? { error: error.message } : {}
 }
 

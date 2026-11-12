@@ -60,6 +60,16 @@ export interface GrowthRecord {
   createdAt: string
 }
 
+/** 反馈与建议 */
+export interface FeedbackItem {
+  id: string
+  content: string
+  contact?: string | null
+  createdBy: string
+  status: 'pending' | 'done'
+  createdAt: string
+}
+
 export const EVENT_META: Record<
   EventType,
   { label: string; short: string; color: string; icon: string }

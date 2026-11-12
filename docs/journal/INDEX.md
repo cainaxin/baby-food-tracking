@@ -26,6 +26,7 @@
 | 2026-11-11 | 启动加速：缓存秒开 + 增量同步 | perf, cache, sync, incremental, realtime | 已完成 | [2026-11-11](./2026-11-11.md) |
 | 2026-11-11 | 应用内一键检查更新 + OpenWrt 自动更新脚本 | update, release, apk, openwrt | 已完成 | [2026-11-11-app-update](./2026-11-11-app-update.md) |
 | 2026-11-13 | 关于页常驻「下载 APK」按钮 + Release latest 别名资产 | ui, apk, download, release | 已完成 | [2026-11-13](./2026-11-13.md) |
+| 2026-11-13 | 反馈与建议：家人提交 + 主账号 App 内查看 | feedback, supabase, rls, ui | 已完成 | [2026-11-13](./2026-11-13.md) |
 
 ## 环境速查
 
