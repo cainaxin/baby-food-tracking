@@ -39,11 +39,11 @@ TAR_FILE="/tmp/baby-dist-$VER_DASH.tar.gz"
 echo "下载 $TAR_URL ..."
 wget -O "$TAR_FILE" "$TAR_URL"
 
-# 备份旧版 → 解压新版
+# 备份旧版 → 解压新版（就地更新，不替换目录，避免 Docker bind mount 失效）
 echo "更新中..."
 [ -d "$BACKUP_DIR" ] && rm -rf "$BACKUP_DIR"
-mv "$DIST_DIR" "$BACKUP_DIR"
-mkdir -p "$DIST_DIR"
+cp -a "$DIST_DIR" "$BACKUP_DIR"
+rm -rf "${DIST_DIR:?}/"*
 tar -xzf "$TAR_FILE" -C "$DIST_DIR/"
 rm "$TAR_FILE"
 
