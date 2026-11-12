@@ -45,4 +45,10 @@ const body = `// 由 scripts/build-info.mjs 在 build/dev 前生成，请勿手�
 export const buildInfo = ${JSON.stringify(info, null, 2)} as const
 `
 writeFileSync(file, body)
+
+// 同时写出纯文本版本号，供 OpenWrt 更新脚本读取
+const publicDir = join(root, 'public')
+mkdirSync(publicDir, { recursive: true })
+writeFileSync(join(publicDir, 'version.txt'), info.version)
+
 console.log(`buildInfo: v${info.version} ${info.commit} @ ${info.buildTime}`)

@@ -10,13 +10,10 @@ REPO="cainaxin/baby-food-tracking"
 # gh-proxy 加速（国内直连 GitHub 慢）
 MIRROR="https://gh-proxy.com/https://github.com"
 
-# 读当前版本（从已部署的 buildInfo）
+# 读当前版本（从已部署的 version.txt，构建时生成）
 CURRENT_VER=""
-if [ -d "$DIST_DIR/assets" ]; then
-  INFO_FILE=$(ls "$DIST_DIR"/assets/index-*.js 2>/dev/null | head -1)
-  if [ -n "$INFO_FILE" ]; then
-    CURRENT_VER=$(grep -o '"version":"[^"]*"' "$INFO_FILE" | head -1 | cut -d'"' -f4)
-  fi
+if [ -f "$DIST_DIR/version.txt" ]; then
+  CURRENT_VER=$(cat "$DIST_DIR/version.txt")
 fi
 echo "当前版本: ${CURRENT_VER:-未知}"
 
