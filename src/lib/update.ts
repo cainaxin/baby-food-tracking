@@ -2,6 +2,11 @@ import { buildInfo } from '../generated/buildInfo'
 
 const REPO = 'cainaxin/baby-food-tracking'
 
+/** 最新 APK 固定下载地址（Release 上传 baby-food-tracker-latest.apk 别名） */
+export const LATEST_APK_URL = `https://github.com/${REPO}/releases/latest/download/baby-food-tracker-latest.apk`
+/** Release 页面（APK 下载失败时的兜底入口） */
+export const RELEASES_PAGE_URL = `https://github.com/${REPO}/releases/latest`
+
 export type UpdateCheckResult = {
   hasUpdate: boolean
   version: string

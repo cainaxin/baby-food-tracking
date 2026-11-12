@@ -51,7 +51,7 @@ import {
   formatMonthAge,
 } from './lib/time'
 import { buildInfo } from './generated/buildInfo'
-import { checkForUpdate } from './lib/update'
+import { checkForUpdate, LATEST_APK_URL } from './lib/update'
 
 type Tab = 'home' | 'history' | 'growth' | 'settings'
 /** 记一笔类型选择顺序 */
@@ -3315,10 +3315,25 @@ export default function App() {
                   {buildInfo.buildTime && (
                     <div>发布构建：{formatAboutTime(buildInfo.buildTime)}</div>
                   )}
+                  <a
+                    href={LATEST_APK_URL}
+                    className="btn btn-primary"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: '100%',
+                      marginTop: 14,
+                      minHeight: 48,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    下载 APK（安卓安装包）
+                  </a>
                   <button
                     type="button"
                     className="btn btn-secondary"
-                    style={{ width: '100%', marginTop: 14, minHeight: 48 }}
+                    style={{ width: '100%', marginTop: 10, minHeight: 48 }}
                     disabled={updateChecking}
                     onClick={handleCheckUpdate}
                   >

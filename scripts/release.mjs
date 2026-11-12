@@ -21,6 +21,7 @@ const repo = 'cainaxin/baby-food-tracking'
 const ver = tag.replace(/\./g, '-')
 const tarName = `baby-dist-${ver}.tar.gz`
 const apkName = `baby-food-tracker-${tag}.apk`
+const apkLatestName = 'baby-food-tracker-latest.apk'
 
 function sh(cmd) {
   return execSync(cmd, { cwd: root, encoding: 'utf8', stdio: 'inherit' })
@@ -110,7 +111,7 @@ console.log(`  release_id=${release.id}`)
 const listRes = await fetch(`https://api.github.com/repos/${repo}/releases/${release.id}/assets`, { headers })
 const existing = listRes.ok ? await listRes.json() : []
 for (const a of existing) {
-  if ([tarName, apkName].includes(a.name)) {
+  if ([tarName, apkName, apkLatestName].includes(a.name)) {
     console.log(`  删除旧资产 ${a.name}`)
     await fetch(`https://api.github.com/repos/${repo}/releases/assets/${a.id}`, {
       method: 'DELETE',
@@ -123,10 +124,13 @@ for (const a of existing) {
 const assets = [
   { name: tarName, type: 'application/gzip' },
   { name: apkName, type: 'application/vnd.android.package-archive' },
+  // latest 别名：网页「下载 APK」按钮固定指到这里，永远指向最新版
+  { name: apkLatestName, type: 'application/vnd.android.package-archive' },
 ]
 for (const asset of assets) {
   console.log(`▸ 上传 ${asset.name}…`)
-  const bytes = readFileSync(join(root, asset.name))
+  // latest 别名复用同一 APK 字节
+  const bytes = readFileSync(join(root, asset.name === apkLatestName ? apkName : asset.name))
   const uploadRes = await fetch(
     `https://uploads.github.com/repos/${repo}/releases/${release.id}/assets?name=${asset.name}`,
     {
