@@ -51,6 +51,7 @@ import {
   formatMonthAge,
 } from './lib/time'
 import { buildInfo } from './generated/buildInfo'
+import { checkForUpdate } from './lib/update'
 
 type Tab = 'home' | 'history' | 'growth' | 'settings'
 /** 记一笔类型选择顺序 */
@@ -2330,6 +2331,9 @@ export default function App() {
   const [savedConfirm, setSavedConfirm] = useState<SavedConfirm | null>(null)
   /** 「关于」卡片选项卡：版本信息 / 更新内容 */
   const [aboutTab, setAboutTab] = useState<'version' | 'notes'>('version')
+  /** 检查更新状态 */
+  const [updateChecking, setUpdateChecking] = useState(false)
+  const [updateResult, setUpdateResult] = useState<{ hasUpdate: boolean; version: string; apkUrl: string | null } | null>(null)
   /** 首页时间线是否展开全部 */
   const [timelineExpanded, setTimelineExpanded] = useState(false)
   /** 云端同步状态 */
@@ -2690,6 +2694,20 @@ export default function App() {
     if (error) setToast(error)
     setSheet(null)
     await refresh()
+  }
+
+  const handleCheckUpdate = async () => {
+    setUpdateChecking(true)
+    try {
+      const result = await checkForUpdate()
+      setUpdateResult({
+        hasUpdate: result.hasUpdate,
+        version: result.version,
+        apkUrl: result.apkUrl,
+      })
+    } finally {
+      setUpdateChecking(false)
+    }
   }
 
   const renderTimeline = (events: BabyEvent[]) => {
@@ -3296,6 +3314,56 @@ export default function App() {
                   )}
                   {buildInfo.buildTime && (
                     <div>发布构建：{formatAboutTime(buildInfo.buildTime)}</div>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    style={{ width: '100%', marginTop: 14, minHeight: 48 }}
+                    disabled={updateChecking}
+                    onClick={handleCheckUpdate}
+                  >
+                    {updateChecking ? '检查中…' : '检查更新'}
+                  </button>
+                  {updateResult && (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        padding: '10px 12px',
+                        borderRadius: 10,
+                        background: updateResult.hasUpdate ? '#FFF3E0' : '#E8F5E9',
+                        color: updateResult.hasUpdate ? '#E65100' : '#2E7D32',
+                        fontWeight: 600,
+                        fontSize: 14,
+                      }}
+                    >
+                      {updateResult.hasUpdate ? (
+                        <>
+                          <div>发现新版本 {updateResult.version}，请让家人更新 APK 或刷新网页</div>
+                          {updateResult.apkUrl && (
+                            <a
+                              href={updateResult.apkUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                display: 'inline-block',
+                                marginTop: 8,
+                                padding: '8px 14px',
+                                borderRadius: 8,
+                                background: '#E65100',
+                                color: '#fff',
+                                textDecoration: 'none',
+                                fontWeight: 600,
+                                fontSize: 13,
+                              }}
+                            >
+                              下载新版 APK
+                            </a>
+                          )}
+                        </>
+                      ) : (
+                        '已是最新版本'
+                      )}
+                    </div>
                   )}
                 </div>
               ) : (
