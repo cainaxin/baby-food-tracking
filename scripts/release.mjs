@@ -130,7 +130,8 @@ const assets = [
 for (const asset of assets) {
   console.log(`▸ 上传 ${asset.name}…`)
   // latest 别名复用同一 APK 字节
-  const bytes = readFileSync(join(root, asset.name === apkLatestName ? apkName : asset.name))
+  const filePath = join(root, asset.name === apkLatestName ? apkName : asset.name)
+  const bytes = readFileSync(filePath)
   const uploadRes = await fetch(
     `https://uploads.github.com/repos/${repo}/releases/${release.id}/assets?name=${asset.name}`,
     {
@@ -149,7 +150,7 @@ for (const asset of assets) {
     process.exit(1)
   }
   const uploaded = await uploadRes.json()
-  console.log(`  ${uploaded.name} (${statSync(join(root, asset.name)).size} bytes)`)
+  console.log(`  ${uploaded.name} (${statSync(filePath).size} bytes)`)
   console.log(`  ${uploaded.browser_download_url}`)
 }
 console.log('✓ 发版完成（网页包 + APK 双资产）')
