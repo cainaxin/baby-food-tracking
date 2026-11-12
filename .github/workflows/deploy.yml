@@ -1,0 +1,27 @@
+name: Deploy to OpenWrt
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger OpenWrt update
+        run: |
+          echo "Triggering OpenWrt to pull latest release..."
+          RESPONSE=$(curl -sf --max-time 120 \
+            "http://nxhome.cloud/cgi-bin/baby-update.cgi?token=${{ secrets.UPDATE_TOKEN }}" \
+            2>&1) || true
+          echo "Router response: $RESPONSE"
+          # 路由器不在线或脚本没装时不算失败
+          if echo "$RESPONSE" | grep -q "更新完成\|已是最新"; then
+            echo "✅ OpenWrt updated successfully"
+          elif echo "$RESPONSE" | grep -q "403\|401"; then
+            echo "❌ Token invalid — check secrets.UPDATE_TOKEN"
+            exit 1
+          else
+            echo "⚠️  Router may not have the update script installed yet, or not reachable"
+            echo "   (This is OK if you haven't set up the router endpoint yet)"
+          fi
