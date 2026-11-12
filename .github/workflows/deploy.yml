@@ -1,8 +1,14 @@
 name: Deploy to OpenWrt
 
 on:
+  # Release 发布后触发（此时资产已上传，路由器才能拉到）
+  release:
+    types: [published]
+  # push 作为兜底（例如修 workflow 后想立刻验证）
   push:
     branches: [main]
+  # 手动触发
+  workflow_dispatch:
 
 jobs:
   deploy:
