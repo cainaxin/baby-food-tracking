@@ -12,7 +12,7 @@ MIRROR="https://gh-proxy.com/https://github.com"
 
 # 读当前版本（从已部署的 buildInfo）
 CURRENT_VER=""
-if [ -f "$DIST_DIR/assets" ]; then
+if [ -d "$DIST_DIR/assets" ]; then
   INFO_FILE=$(ls "$DIST_DIR"/assets/index-*.js 2>/dev/null | head -1)
   if [ -n "$INFO_FILE" ]; then
     CURRENT_VER=$(grep -o '"version":"[^"]*"' "$INFO_FILE" | head -1 | cut -d'"' -f4)
