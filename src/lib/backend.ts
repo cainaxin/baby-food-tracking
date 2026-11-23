@@ -1020,7 +1020,9 @@ export function subscribeFamily(
 
 const SUMMARY_KEY = 'baby-tracker-summaries'
 
-function loadLocalSummaries(): Record<string, string> {
+type LocalSummaryEntry = string | { text: string; createdAt: string }
+
+function loadLocalSummaries(): Record<string, LocalSummaryEntry> {
   try {
     return JSON.parse(localStorage.getItem(SUMMARY_KEY) || '{}')
   } catch {
@@ -1028,7 +1030,7 @@ function loadLocalSummaries(): Record<string, string> {
   }
 }
 
-function saveLocalSummaries(map: Record<string, string>) {
+function saveLocalSummaries(map: Record<string, LocalSummaryEntry>) {
   try {
     localStorage.setItem(SUMMARY_KEY, JSON.stringify(map))
   } catch {
@@ -1039,21 +1041,28 @@ function saveLocalSummaries(map: Record<string, string>) {
 export async function getDailySummary(
   babyId: string,
   dayKey: string,
-): Promise<{ text?: string; error?: string }> {
+): Promise<{ text?: string; createdAt?: string; error?: string }> {
   if (!supabase) {
     const map = loadLocalSummaries()
-    return { text: map[`${babyId}:${dayKey}`] }
+    const item = map[`${babyId}:${dayKey}`]
+    if (!item) return {}
+    // 兼容旧格式（纯字符串）
+    if (typeof item === 'string') return { text: item }
+    return { text: item.text, createdAt: item.createdAt }
   }
   const user = await getSessionUser()
   if (!user?.familyId) return { error: '未加入家庭' }
   const { data, error } = await supabase
     .from('daily_summary')
-    .select('text')
+    .select('text, created_at')
     .eq('baby_id', babyId)
     .eq('day_key', dayKey)
     .maybeSingle()
   if (error) return { error: error.message }
-  return { text: data?.text ?? undefined }
+  return {
+    text: data?.text ?? undefined,
+    createdAt: data?.created_at ?? undefined,
+  }
 }
 
 export async function saveDailySummary(
@@ -1063,7 +1072,7 @@ export async function saveDailySummary(
 ): Promise<{ error?: string }> {
   if (!supabase) {
     const map = loadLocalSummaries()
-    map[`${babyId}:${dayKey}`] = text
+    map[`${babyId}:${dayKey}`] = { text, createdAt: nowIso() }
     saveLocalSummaries(map)
     return {}
   }

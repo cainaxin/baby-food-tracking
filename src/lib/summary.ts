@@ -14,6 +14,8 @@ function fmtMin(mins: number): string {
 export type DailySummary = {
   /** AI 生成的总结与建议 */
   text: string
+  /** 生成时间（ISO 字符串），用于展示和判断是否过期 */
+  createdAt?: string
   /** 聚合数据（便于回看） */
   stats: {
     milkMl: number
@@ -129,7 +131,10 @@ export async function fetchDailySummary(
   try {
     const cached = await getDailySummary(baby.id, dayKey)
     if (cached.text) {
-      return { summary: { text: cached.text, stats }, fromCache: true }
+      return {
+        summary: { text: cached.text, createdAt: cached.createdAt, stats },
+        fromCache: true,
+      }
     }
   } catch {
     // 缓存查询失败不阻塞生成
@@ -138,7 +143,7 @@ export async function fetchDailySummary(
   // 2. 本地模式或无 AI 时降级
   if (!supabase) {
     const text = fallbackSummary(baby, stats)
-    return { summary: { text, stats } }
+    return { summary: { text, createdAt: new Date().toISOString(), stats } }
   }
 
   // 3. 调 AI（直接 fetch 调 EF，避免 supabase.functions.invoke 兼容问题）
@@ -154,19 +159,19 @@ export async function fetchDailySummary(
     })
     if (!res.ok) {
       console.warn('daily-summary EF error', res.status)
-      return { summary: { text: fallbackSummary(baby, stats), stats } }
+      return { summary: { text: fallbackSummary(baby, stats), createdAt: new Date().toISOString(), stats } }
     }
     const data = await res.json()
     const text = data?.text
     if (!text || typeof text !== 'string') {
-      return { summary: { text: fallbackSummary(baby, stats), stats } }
+      return { summary: { text: fallbackSummary(baby, stats), createdAt: new Date().toISOString(), stats } }
     }
     // 异步存缓存，不阻塞展示
     void saveDailySummary(baby.id, dayKey, text).catch(() => {})
-    return { summary: { text, stats } }
+    return { summary: { text, createdAt: new Date().toISOString(), stats } }
   } catch (e) {
     console.warn('daily-summary fetch error', e)
-    return { summary: { text: fallbackSummary(baby, stats), stats } }
+    return { summary: { text: fallbackSummary(baby, stats), createdAt: new Date().toISOString(), stats } }
   }
 }
 

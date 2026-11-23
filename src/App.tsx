@@ -47,6 +47,7 @@ import {
 } from './lib/backend'
 import {
   formatTime,
+  formatDateTime,
   formatDuration,
   formatDayLabel,
   nowIso,
@@ -2234,18 +2235,26 @@ function DailySummaryCard({
     '睡眠质量怎么样？',
   ]
 
-  // 切换日期 / 宝宝时自动加载缓存
+  // 切换日期 / 宝宝时自动加载缓存；非当天生成的小结自动清空
   useEffect(() => {
     let cancelled = false
     setSummary(null)
     setFromCache(false)
+    setGeneratedAt('')
     ;(async () => {
       try {
         const r = await fetchDailySummary(baby, events, dayKey)
-        if (!cancelled && r.summary) {
-          setSummary(r.summary)
-          setFromCache(Boolean(r.fromCache))
-          setGeneratedAt(formatTime(new Date().toISOString()))
+        if (cancelled || !r.summary) return
+        // 生成日期不是当天的，清空不展示
+        const genDay = r.summary.createdAt ? todayKey(new Date(r.summary.createdAt)) : null
+        if (dayKey === todayKey() && genDay && genDay !== todayKey()) {
+          await saveDailySummary(baby.id, dayKey, '')
+          return
+        }
+        setSummary(r.summary)
+        setFromCache(Boolean(r.fromCache))
+        if (r.summary.createdAt) {
+          setGeneratedAt(formatDateTime(r.summary.createdAt))
         }
       } catch {
         // ignore
@@ -2266,7 +2275,7 @@ function DailySummaryCard({
       if (s) {
         setSummary(s)
         setFromCache(false)
-        setGeneratedAt(formatTime(new Date().toISOString()))
+        setGeneratedAt(s.createdAt ? formatDateTime(s.createdAt) : formatDateTime(new Date().toISOString()))
         setExpanded(true)
       }
     } finally {
@@ -2299,7 +2308,7 @@ function DailySummaryCard({
           </div>
           <div className="muted small">
             {summary
-              ? `${fromCache ? '全家共享' : '刚刚生成'}${generatedAt ? ` · ${generatedAt}` : ''}`
+              ? `${fromCache ? '全家共享' : '刚刚生成'}${generatedAt ? ` · 生成于 ${generatedAt}` : ''}`
               : '根据当天记录，给你建议'}
           </div>
         </div>
@@ -2307,7 +2316,7 @@ function DailySummaryCard({
           type="button"
           className="btn btn-secondary summary-btn"
           disabled={loading}
-          onClick={summary ? regenerate : undefined}
+          onClick={regenerate}
         >
           {loading ? '分析中…' : summary ? '重新生成' : '生成小结'}
         </button>
